@@ -13,7 +13,8 @@ O projeto foi estruturado seguindo os padrões do ecossistema Go, separando clar
 * **`cmd/app/`**: Ponto de entrada da aplicação (onde a mágica acontece no terminal). Sem regras de negócio.
 * **`internal/domain/`**: O coração do sistema. Contém as entidades (`Product`, `Order`, `Status`), os erros de domínio (Sentinel Errors) e as regras inegociáveis do negócio.
 * **`internal/repository/`**: Contratos (Interfaces) e a implementação do armazenamento em memória utilizando `Maps`.
-
+* **`internal/service/`**: Orquestrador dos casos de uso (Criar Pedido, Pagar, Cancelar), coordenando a comunicação entre o Domínio e a camada de Dados.
+  
 ```text
 ada_go-desafio_pedidos/
 ├── cmd/
