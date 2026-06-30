@@ -42,7 +42,7 @@ Orquestrador dos casos de uso (Criar Pedido, Pagar, Cancelar), coordenando a com
 
 Clone este repositório em sua máquina:
 ```bash
-git clone [https://github.com/MarceloRodrigues1853/ada_go-desafio_pedidos.git](https://github.com/MarceloRodrigues1853/ada_go-desafio_pedidos.git)
+git clone https://github.com/MarceloRodrigues1853/ada_go-desafio_pedidos.git
 ```
 ---
 ### Navegue até a pasta do projeto:
