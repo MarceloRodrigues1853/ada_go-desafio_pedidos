@@ -8,6 +8,24 @@ type Produto struct {
 	Estoque int
 }
 
+// novoProduto cria um novo produto
+func NovoProduto(id, nome string, preco float64, estoque int) (*Produto, error) {
+	produto := &Produto{
+		ID:      id,
+		Nome:    nome,
+		Preco:   preco,
+		Estoque: estoque,
+	}
+
+	// Validamos o produto
+	if err := produto.validarProduto(); err != nil {
+		return nil, err
+	}
+
+	// Retornamos o produto validado
+	return produto, nil
+}
+
 // DevolverEstoque repõe itens no estoque (ex: quando um pedido é cancelado)
 // usamos `p.Estoque += quantidade` para SOMAR, e não substituir (=)
 func (p *Produto) DevolverEstoque(quantidade int) {
@@ -28,4 +46,12 @@ func (p *Produto) ReduzirEstoque(quantidade int) error {
 
 	// 3. Devolvemos nil (nulo) para avisar que nenhum erro aconteceu
 	return nil
+}
+
+func (p *Produto) validarProduto() error {
+	if p.ID == "" || p.Nome == "" || p.Preco <= 0 || p.Estoque < 0 {
+		return ErrProdutoInvalido
+	}
+	return nil
+
 }

@@ -26,6 +26,15 @@ type Pedido struct {
 	Status  StatusPedido
 }
 
+func NovoPedido(id string, cliente string, status StatusPedido) *Pedido {
+	return &Pedido{
+		ID:      id,
+		Cliente: cliente,
+		Itens:   []ItemPedido{},
+		Status:  status,
+	}
+}
+
 // "CalcularTotal" deve percorrer os "Itens do pedido", "multiplicar" o "Preco" pela "Quantidade"
 // de cada item e "retornar" a "soma total".
 func (p *Pedido) CalcularTotal() float64 {

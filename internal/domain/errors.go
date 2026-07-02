@@ -12,4 +12,5 @@ var (
 	ErrClienteInvalido         = errors.New("cliente inválido")
 	ErrPedidoVazio             = errors.New("pedido vazio")
 	ErrMudancaDeStatusInvalida = errors.New("mudança de status inválida")
+	ErrProdutoInvalido         = errors.New("produto inválido")
 )
