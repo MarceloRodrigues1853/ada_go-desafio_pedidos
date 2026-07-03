@@ -1,5 +1,7 @@
 package domain
 
+import "strings"
+
 // 1. Criando o "Enum" de Status
 // Definimos que "StatusPedido" é, na base, uma string
 type StatusPedido string
@@ -26,13 +28,30 @@ type Pedido struct {
 	Status  StatusPedido
 }
 
-func NovoPedido(id string, cliente string, status StatusPedido) *Pedido {
-	return &Pedido{
+// NovoPedido  retorna um erro se os dados forem inválidos
+func NovoPedido(id string, cliente string, status StatusPedido) (*Pedido, error) {
+	pedido := &Pedido{
 		ID:      id,
 		Cliente: cliente,
 		Itens:   []ItemPedido{},
 		Status:  status,
 	}
+
+	// Validamos o pedido antes de deixá-lo nascer
+	if err := pedido.validarPedido(); err != nil {
+		return nil, err
+	}
+
+	return pedido, nil
+}
+
+// Método privado para validar os dados básicos do pedido
+func (p *Pedido) validarPedido() error {
+	// A função strings.TrimSpace remove todos os espaços em branco ("   " vira "")
+	if strings.TrimSpace(p.ID) == "" || strings.TrimSpace(p.Cliente) == "" {
+		return ErrPedidoInvalido
+	}
+	return nil
 }
 
 // "CalcularTotal" deve percorrer os "Itens do pedido", "multiplicar" o "Preco" pela "Quantidade"

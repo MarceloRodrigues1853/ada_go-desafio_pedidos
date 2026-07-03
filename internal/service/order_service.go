@@ -25,7 +25,10 @@ func (s *OrderService) CriarPedido(idPedido, cliente, idProduto string, quantida
 
 	// 1. Cria a base do pedido usando a Factory Function.
 	// Todo pedido nasce com o status "PENDENTE".
-	pedido := domain.NovoPedido(idPedido, cliente, domain.StatusPendente)
+	pedido, err := domain.NovoPedido(idPedido, cliente, domain.StatusPendente)
+	if err != nil {
+		return nil, err // Se o ID for vazio, a missão é abortada aqui mesmo
+	}
 
 	// 2. Vamos ao banco de dados (repositório) ver se o produto solicitado realmente existe.
 	produto, err := s.produtoRepo.BuscarPorID(idProduto)
