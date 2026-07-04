@@ -53,6 +53,30 @@ cd ada_go-desafio_pedidos
 ```bash
 go run cmd/app/main.go
 ```
+
+## 🧪 Exemplos de Uso e Testes (Cenários)
+A aplicação inclui um script de simulação no `main.go` que atua como um **teste de integração** das regras de negócio. Abaixo estão as evidências de execução cobrindo os cenários de **sucesso** e **bloqueio**:
+
+### Bloqueio de Produto Inválido
+O sistema impede a inicialização se tentar registrar um produto com dados ausentes (como nome vazio) ou valores negativos.
+
+![produto_invalido](./assets/produto_invalido.png)
+
+### Validação de Cliente e Pedido
+O sistema barra a criação de carrinhos de compra caso a identificação do pedido ou do cliente estejam em branco.
+
+![cliente_invalido](./assets/cliente_invalido.png)
+
+## Proteção contra Estoque Insuficiente
+Se a quantidade solicitada for maior que o saldo do repositório, a entidade do domínio entra em ação e estorna a operação.
+
+![estoque_invalido](./assets/estoque_invalido.png)
+
+### Caminho Feliz (Compra e Pagamento)
+O fluxo ideal, onde o sistema aprova a compra, reduz o estoque no repositório em memória e atualiza o status via Service.
+
+![sucesso](./assets/sucesso.png)
+
 ## 🛠️ Tecnologias
 - **Linguagem**: Go (Golang)
 
