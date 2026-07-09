@@ -21,12 +21,15 @@ O projeto foi estruturado seguindo os padrões do ecossistema Go, separando clar
 ada_go-desafio_pedidos/
 ├── cmd/
 │   └── app/
-│       └── main.go                  # Ponto de entrada (orquestração principal)
+│       └── main.go                  # Ponto de entrada e orquestrador do servidor HTTP
 ├── internal/
+│   ├── controllers/                 # Nova Camada Web (Handlers)
+│   │   ├── order_controller.go      # Traduz JSON/HTTP para regras de Pedidos
+│   │   └── product_controller.go    # Traduz JSON/HTTP para regras de Produtos
 │   ├── domain/
 │   │   ├── errors.go                # Erros globais do sistema (Sentinel Errors)
-│   │   ├── order.go                 # Entidades e regras de Pedido
-│   │   └── product.go               # Entidades e regras de Produto
+│   │   ├── order.go                 # Entidades e regras inegociáveis de Pedido
+│   │   └── product.go               # Entidades e regras inegociáveis de Produto
 │   ├── repository/
 │   │   ├── memory_order_repo.go     # Implementação em memória (map) para pedidos
 │   │   ├── memory_product_repo.go   # Implementação em memória (map) para produtos
@@ -100,7 +103,7 @@ Com o servidor rodando, você pode utilizar o Postman, Thunder Client ou `curl` 
 
 ---
 
-## 📸 Evidências de Teste (Postman)
+## Casos de Teste (Postman)
 
 Abaixo estão os resultados das requisições reais feitas à API, comprovando o funcionamento do roteamento e a blindagem das regras de negócio pela Clean Architecture.
 
