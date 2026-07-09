@@ -1,1 +1,33 @@
+# ========================
+# VARIÁVEIS DE AMBIENTE (CRÍTICO!)
+# ========================
 .env
+.env.*
+
+# ========================
+# BINÁRIOS E EXECUTÁVEIS GO
+# ========================
+# Ignora arquivos compilados no Windows, Mac e Linux
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/bin/
+
+# ========================
+# PASTAS DE EDITORES E IDEs
+# ========================
+# Ignora configurações do Cursor / VS Code
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ========================
+# ARQUIVOS DO SISTEMA OPERACIONAL
+# ========================
+.DS_Store
+Thumbs.db
