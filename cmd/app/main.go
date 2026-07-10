@@ -73,7 +73,7 @@ func main() {
 	// Os Controladores servem como a ponte entre o Postman e o núcleo da aplicação.
 	// Injetamos as consultas do sqlc no ClientController e as regras de negócio nos demais.
 	clientController := controllers.NewClientController(queries)
-	productController := controllers.NewProductController(produtoRepo)
+	productController := controllers.NewProductController(queries)
 	orderController := controllers.NewOrderController(orderService)
 
 	// =========================================================================
