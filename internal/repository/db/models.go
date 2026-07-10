@@ -5,15 +5,35 @@
 package db
 
 import (
-	"time"
-
-	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Cliente struct {
-	ID           uuid.UUID `json:"id"`
-	Name         string    `json:"name"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"password_hash"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID           pgtype.UUID      `json:"id"`
+	Name         string           `json:"name"`
+	Email        string           `json:"email"`
+	PasswordHash string           `json:"password_hash"`
+	CreatedAt    pgtype.Timestamp `json:"created_at"`
+}
+
+type ItensPedido struct {
+	ID            pgtype.UUID    `json:"id"`
+	PedidoID      pgtype.UUID    `json:"pedido_id"`
+	ProdutoID     string         `json:"produto_id"`
+	Quantidade    int32          `json:"quantidade"`
+	PrecoUnitario pgtype.Numeric `json:"preco_unitario"`
+}
+
+type Pedido struct {
+	ID        pgtype.UUID      `json:"id"`
+	ClienteID pgtype.UUID      `json:"cliente_id"`
+	Status    string           `json:"status"`
+	CreatedAt pgtype.Timestamp `json:"created_at"`
+}
+
+type Produto struct {
+	ID      string         `json:"id"`
+	Nome    string         `json:"nome"`
+	Preco   pgtype.Numeric `json:"preco"`
+	Estoque int32          `json:"estoque"`
 }

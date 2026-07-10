@@ -8,7 +8,7 @@ package db
 import (
 	"context"
 
-	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createCliente = `-- name: CreateCliente :one
@@ -24,7 +24,7 @@ type CreateClienteParams struct {
 }
 
 func (q *Queries) CreateCliente(ctx context.Context, arg CreateClienteParams) (Cliente, error) {
-	row := q.db.QueryRowContext(ctx, createCliente, arg.Name, arg.Email, arg.PasswordHash)
+	row := q.db.QueryRow(ctx, createCliente, arg.Name, arg.Email, arg.PasswordHash)
 	var i Cliente
 	err := row.Scan(
 		&i.ID,
@@ -42,8 +42,8 @@ FROM clientes
 WHERE id = $1 LIMIT 1
 `
 
-func (q *Queries) GetCliente(ctx context.Context, id uuid.UUID) (Cliente, error) {
-	row := q.db.QueryRowContext(ctx, getCliente, id)
+func (q *Queries) GetCliente(ctx context.Context, id pgtype.UUID) (Cliente, error) {
+	row := q.db.QueryRow(ctx, getCliente, id)
 	var i Cliente
 	err := row.Scan(
 		&i.ID,
@@ -62,7 +62,7 @@ ORDER BY created_at DESC
 `
 
 func (q *Queries) ListClientes(ctx context.Context) ([]Cliente, error) {
-	rows, err := q.db.QueryContext(ctx, listClientes)
+	rows, err := q.db.Query(ctx, listClientes)
 	if err != nil {
 		return nil, err
 	}
@@ -80,9 +80,6 @@ func (q *Queries) ListClientes(ctx context.Context) ([]Cliente, error) {
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
