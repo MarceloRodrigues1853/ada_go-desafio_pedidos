@@ -8,7 +8,7 @@ package db
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/google/uuid"
 )
 
 const createCliente = `-- name: CreateCliente :one
@@ -42,7 +42,7 @@ FROM clientes
 WHERE id = $1 LIMIT 1
 `
 
-func (q *Queries) GetCliente(ctx context.Context, id pgtype.UUID) (Cliente, error) {
+func (q *Queries) GetCliente(ctx context.Context, id uuid.UUID) (Cliente, error) {
 	row := q.db.QueryRow(ctx, getCliente, id)
 	var i Cliente
 	err := row.Scan(

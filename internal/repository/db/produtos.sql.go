@@ -7,8 +7,6 @@ package db
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createProduto = `-- name: CreateProduto :one
@@ -18,10 +16,10 @@ RETURNING id, nome, preco, estoque
 `
 
 type CreateProdutoParams struct {
-	ID      string         `json:"id"`
-	Nome    string         `json:"nome"`
-	Preco   pgtype.Numeric `json:"preco"`
-	Estoque int32          `json:"estoque"`
+	ID      string  `json:"id"`
+	Nome    string  `json:"nome"`
+	Preco   float64 `json:"preco"`
+	Estoque int32   `json:"estoque"`
 }
 
 func (q *Queries) CreateProduto(ctx context.Context, arg CreateProdutoParams) (Produto, error) {

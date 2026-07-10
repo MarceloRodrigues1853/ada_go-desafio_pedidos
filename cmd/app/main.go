@@ -9,7 +9,6 @@ import (
 
 	// Camadas internas da aplicação (Módulo: pedidos)
 	"pedidos/internal/controllers"   // Controladores que recebem o JSON do Postman e tratam HTTP
-	"pedidos/internal/repository"    // Repositórios antigos (em memória) para transição gradual
 	"pedidos/internal/repository/db" // Código gerado pelo sqlc que executa comandos no Postgres
 	"pedidos/internal/service"       // Camada de Serviço que isola as Regras de Negócio da aplicação
 
@@ -55,23 +54,18 @@ func main() {
 	// Instancia o repositório automático de Clientes gerado pelo sqlc, passando o pool do Postgres
 	queries := db.New(pool)
 
-	// Repositórios provisórios em memória (RAM) criados na aula 03 para Produtos e Pedidos.
-	// Eles serão substituídos pelas tabelas reais do Postgres nos próximos passos do desafio.
-	produtoRepo := repository.NewMemoryProductRepository()
-	pedidoRepo := repository.NewMemoryOrderRepository()
-
 	// =========================================================================
 	// 4. INJEÇÃO DE DEPENDÊNCIAS - CAMADA DE SERVIÇO (REGRAS DE NEGÓCIO)
 	// =========================================================================
 	// O Service centraliza as regras cruciais (ex: "pedido precisa ter itens", "estoque deve diminuir").
 	// Ele recebe os repositórios necessários para consultar e persistir dados.
-	orderService := service.NewOrderService(produtoRepo, pedidoRepo)
+	orderService := service.NewOrderService(queries)
 
 	// =========================================================================
 	// 5. INJEÇÃO DE DEPENDÊNCIAS - CAMADA DE CONTROLE (HTTP / API)
 	// =========================================================================
 	// Os Controladores servem como a ponte entre o Postman e o núcleo da aplicação.
-	// Injetamos as consultas do sqlc no ClientController e as regras de negócio nos demais.
+	// Injetamos a variável "queries" (o banco real) em vez da memória RAM provisória
 	clientController := controllers.NewClientController(queries)
 	productController := controllers.NewProductController(queries)
 	orderController := controllers.NewOrderController(orderService)
@@ -89,7 +83,7 @@ func main() {
 	r.Post("/clientes", clientController.Create) // Recebe dados e cadastra um novo cliente no banco
 	r.Get("/clientes", clientController.List)    // Busca e lista todos os clientes cadastrados do banco
 
-	// --- ROTAS DA ENTIDADE: PRODUTOS (RODANDO NA MEMÓRIA PROVISÓRIA) ---
+	// --- ROTAS DA ENTIDADE: PRODUTOS (INTEGRADO AO POSTGRESQL REAL) ---
 	r.Post("/produtos", productController.Create)
 	r.Get("/produtos", productController.List)
 

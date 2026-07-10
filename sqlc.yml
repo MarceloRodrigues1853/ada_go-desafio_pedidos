@@ -1,11 +1,19 @@
-version: "2"
+version: "2" # Versão do motor de configuração do utilitário SQLC
 sql:
-  - engine: "postgresql"
-    queries: "sqlc/queries/"
-    schema: "migrations/"
+  - engine: "postgresql" # Define que o banco de dados alvo do projeto é o PostgreSQL
+    queries: "sqlc/queries/" # Pasta onde escrevemos nossos arquivos puramente .sql (comandos)
+    schema: "migrations/" # Pasta onde ficam as estruturas das tabelas (.up.sql) para validação
     gen:
       go:
-        package: "db"
-        out: "internal/repository/db"
-        emit_json_tags: true
-        sql_package: "pgx/v5"
+        package: "db" # Nome do pacote Go que será gerado dentro dos arquivos
+        out: "internal/repository/db" # Pasta de destino onde o código Go tipado será salvo
+        emit_json_tags: true # Força o SQLC a adicionar marcas `json:"campo"` em todas as structs
+        sql_package: "pgx/v5" # Garante compatibilidade nativa com o driver moderno pgxpool da AWS/Jackc
+        overrides: # Mapeamentos personalizados para forçar tipos de dados específicos no Go:
+          - db_type: "uuid"
+            go_type: "github.com/google/uuid.UUID" # Substitui o tipo nativo do driver pelo UUID do Google
+          # colunas exatas (Tabela.Coluna):
+          - column: "produtos.preco"
+            go_type: "float64"
+          - column: "itens_pedido.preco_unitario"
+            go_type: "float64"

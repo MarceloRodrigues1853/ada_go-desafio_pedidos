@@ -8,7 +8,7 @@ package db
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/google/uuid"
 )
 
 const createItemPedido = `-- name: CreateItemPedido :one
@@ -18,10 +18,10 @@ RETURNING id, pedido_id, produto_id, quantidade, preco_unitario
 `
 
 type CreateItemPedidoParams struct {
-	PedidoID      pgtype.UUID    `json:"pedido_id"`
-	ProdutoID     string         `json:"produto_id"`
-	Quantidade    int32          `json:"quantidade"`
-	PrecoUnitario pgtype.Numeric `json:"preco_unitario"`
+	PedidoID      uuid.UUID `json:"pedido_id"`
+	ProdutoID     string    `json:"produto_id"`
+	Quantidade    int32     `json:"quantidade"`
+	PrecoUnitario float64   `json:"preco_unitario"`
 }
 
 // Adiciona um produto dentro do carrinho do pedido
@@ -50,7 +50,7 @@ RETURNING id, cliente_id, status, created_at
 `
 
 // Cria a "capa" do pedido vinculada a um cliente. O status padrão ('PENDING') e o ID são gerados pelo banco.
-func (q *Queries) CreatePedido(ctx context.Context, clienteID pgtype.UUID) (Pedido, error) {
+func (q *Queries) CreatePedido(ctx context.Context, clienteID uuid.UUID) (Pedido, error) {
 	row := q.db.QueryRow(ctx, createPedido, clienteID)
 	var i Pedido
 	err := row.Scan(
@@ -69,7 +69,7 @@ WHERE id = $1 LIMIT 1
 `
 
 // Busca os detalhes da capa do pedido para validações
-func (q *Queries) GetPedidoByID(ctx context.Context, id pgtype.UUID) (Pedido, error) {
+func (q *Queries) GetPedidoByID(ctx context.Context, id uuid.UUID) (Pedido, error) {
 	row := q.db.QueryRow(ctx, getPedidoByID, id)
 	var i Pedido
 	err := row.Scan(
@@ -88,8 +88,8 @@ WHERE id = $1
 `
 
 type UpdatePedidoStatusParams struct {
-	ID     pgtype.UUID `json:"id"`
-	Status string      `json:"status"`
+	ID     uuid.UUID `json:"id"`
+	Status string    `json:"status"`
 }
 
 // Usado pelas rotas de Pagar e Cancelar para mudar o status ('PAID' ou 'CANCELED')
