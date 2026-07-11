@@ -2,42 +2,37 @@
 
 Este repositório contém a resolução do desafio prático de arquitetura e domínio em Go, desenvolvido durante a formação **Ser+Tech (Ada Tech & Núclea Associação)**.
 
-O projeto evoluiu de uma simulação no terminal para uma **API Web 100% funcional**, focada em regras de negócio, Design de Domínio (DDD) e Clean Architecture, operando com dados em memória e roteamento HTTP.
+O projeto evoluiu de uma simulação no terminal para uma **API Web 100% funcional**, operando com banco de dados relacional (**PostgreSQL**), roteamento HTTP, geração automática de queries com **sqlc** e gerenciamento de pool de conexões com **pgx**.
 
 ## 🎯 Objetivo do Projeto
-Construir o núcleo de um serviço de pedidos isolando as regras de negócio puras de frameworks externos. 
-A aplicação simula um ambiente de **e-commerce**, protegendo o estado do sistema contra **compras sem estoque** ou **mudanças de status inválidas** (ex: **cancelar um pedido já pago**)
+Construir o núcleo de um serviço de pedidos isolando as regras de negócio puras de frameworks externos. A aplicação simula um ambiente de **e-commerce**, protegendo a integridade do banco de dados e garantindo regras como: não vender sem estoque, validar a existência de clientes e impedir mudanças de status inválidas (ex: **cancelar um pedido já pago**).
 
 ## 🏗️ Arquitetura e Estrutura
-O projeto foi estruturado seguindo os padrões do ecossistema Go, separando claramente as responsabilidades:
+O projeto foi estruturado seguindo padrões modernos do ecossistema Go, substituindo repositórios em memória por persistência real e tipagem estrita:
 
-* `cmd/app/` : Ponto de entrada da aplicação e orquestrador do servidor HTTP (**go-chi**).
-* `internal/controllers/` : Camada Web (**Handlers**). Traduz as requisições JSON da internet para a linguagem do sistema.
-* `internal/domain/` : O coração do sistema. Contém as entidades (`Produto`, `Pedido`, `Status`), os erros de domínio (**Sentinel Errors**) e as regras inegociáveis.
-* `internal/repository/` : Contratos (**Interfaces**) e a implementação do armazenamento em memória utilizando Maps.
-* `internal/service/` : Orquestrador dos casos de uso (**Criar Pedido, Pagar, Cancelar**), coordenando a comunicação entre o **Domínio** e a **camada de Dados**.
-  
+* `cmd/app/` : Ponto de entrada da aplicação, configuração de dependências e orquestrador do servidor HTTP (**go-chi**).
+* `internal/controllers/` : Camada Web. Traduz as requisições JSON da internet para UUIDs e tipos nativos do sistema.
+* `internal/repository/db/` : Camada de dados com código gerado automaticamente pelo **sqlc**, garantindo acesso seguro e tipado ao PostgreSQL.
+* `internal/service/` : Orquestrador dos casos de uso (**Criar Pedido, Pagar, Cancelar**), coordenando a validação de regras antes de acionar o banco.
+* `migrations/` & `sqlc/` : Arquivos de infraestrutura para criação das tabelas e estruturação das consultas SQL.
+
 ```text
-ada_go-desafio_pedidos/
-├── cmd/
-│   └── app/
-│       └── main.go                  # Ponto de entrada e orquestrador do servidor HTTP
+pedidos/
+├── cmd/app/
+│   └── main.go                  # Ponto de entrada, injeção de dependências e roteador
 ├── internal/
-│   ├── controllers/                 # Nova Camada Web (Handlers)
-│   │   ├── order_controller.go      # Traduz JSON/HTTP para regras de Pedidos
-│   │   └── product_controller.go    # Traduz JSON/HTTP para regras de Produtos
-│   ├── domain/
-│   │   ├── errors.go                # Erros globais do sistema (Sentinel Errors)
-│   │   ├── order.go                 # Entidades e regras inegociáveis de Pedido
-│   │   └── product.go               # Entidades e regras inegociáveis de Produto
-│   ├── repository/
-│   │   ├── memory_order_repo.go     # Implementação em memória (map) para pedidos
-│   │   ├── memory_product_repo.go   # Implementação em memória (map) para produtos
-│   │   ├── order_repository.go      # Interface (contrato) do repositório de pedidos
-│   │   └── product_repository.go    # Interface (contrato) do repositório de produtos
+│   ├── controllers/             # Handlers HTTP
+│   │   ├── client_controller.go
+│   │   ├── order_controller.go
+│   │   └── product_controller.go
+│   ├── repository/db/           # Código de persistência gerado via sqlc + pgx
 │   └── service/
-│       └── order_service.go         # Casos de uso e orquestração do negócio
-└── go.mod                           # Gerenciador de dependências do Go
+│       └── order_service.go     # Casos de uso e regras de negócio
+├── migrations/                  # Arquivos de versionamento do banco (.sql)
+├── sqlc/queries/                # Consultas SQL para geração de código
+├── .env                         # Variáveis de ambiente e secrets
+├── Makefile                     # Automação de comandos
+└── sqlc.yaml                    # Configuração de mapeamento e overrides de tipos (UUID, Decimal)
 ```
 
 Padrões: Clean Architecture, Dependency Injection, Interface Segregation.
@@ -54,13 +49,43 @@ git clone https://github.com/MarceloRodrigues1853/ada_go-desafio_pedidos.git
 ```bash
 cd ada_go-desafio_pedidos
 ```
-### Instale as dependências e execute a aplicação:
+### 1. Suba a infraestrutura (Banco de Dados):
+Certifique-se de ter o Docker instalado e o arquivo .env configurado.
+```bash
+docker-compose up -d
+```
+
+### 2. Crie as tabelas (Migrations) e baixe as dependências:
 ```bash
 go mod tidy
-go run cmd/app/main.go
+make migrate-up
+```
+
+### 3. Execute a API:
+```bash
+make run
 ```
 
 ### A API ficará rodando no endereço `http://localhost:8080`
+---
+
+## 🧪 Rotas Disponíveis (Postman)
+### 1. Clientes
+**POST** /clientes -> Cadastra um novo cliente no banco (Retorna UUID).
+
+**GET** /clientes -> Lista os clientes cadastrados.
+
+### 2. Produtos (Estoque)
+**POST** /produtos -> Cadastra um novo produto.
+
+**GET** /produtos -> Lista catálogo e saldo em estoque.
+
+### 3. Pedidos (Vendas)
+**POST** /pedidos -> Cria carrinho, valida cliente via UUID, associa produtos via Foreign Key e desconta estoque.
+
+**PUT** /pedidos/{id}/pagar -> Aprova pagamento e altera status para PAID.
+
+**PUT** /pedidos/{id}/cancelar -> Cancela venda (apenas se estiver pendente) e altera status para CANCELED.
 ---
 
 ## 🧪 Exemplos de Uso e Testes no Terminal(Cenários)
@@ -123,10 +148,20 @@ Abaixo estão os resultados das requisições reais feitas à API, comprovando o
 
 ---
 
-## 🛠️ Tecnologias
-- **Linguagem**: Go (Golang)
+## 🛠️ Tecnologias Utilizadas
+- **Linguagem**: Go (Golang) 1.22+
 
-- **Padrões**: Clean Architecture, Dependency Injection, Interface Segregation.
+- **Banco de Dados**: PostgreSQL rodando em Docker
+
+- **Drivers e Conexão**: `pgxpool` (jackc/pgx/v5)
+
+- **Roteamento HTTP**: `go-chi/chi`
+
+- **Geração de DB Code**: `sqlc`
+
+- **Migrations**: `golang-migrate`
+
+- **Tipagem**: UUIDs oficiais do Google (`google/uuid`)
 
 ---
 *Desenvolvido como parte do módulo de backend em Go da Ada Tech.*
