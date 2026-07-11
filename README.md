@@ -86,6 +86,7 @@ make run
 **PUT** /pedidos/{id}/pagar -> Aprova pagamento e altera status para PAID.
 
 **PUT** /pedidos/{id}/cancelar -> Cancela venda (apenas se estiver pendente) e altera status para CANCELED.
+
 ---
 
 ## 🧪 Exemplos de Uso e Testes no Terminal(Cenários)
