@@ -87,7 +87,7 @@ func main() {
 	r.Post("/produtos", productController.Create)
 	r.Get("/produtos", productController.List)
 
-	// --- ROTAS DA ENTIDADE: PEDIDOS (RODANDO NA MEMÓRIA PROVISÓRIA) ---
+	// --- ROTAS DA ENTIDADE: PEDIDOS (INTEGRADO AO POSTGRESQL REAL) ---
 	r.Post("/pedidos", orderController.Create)              // Cria uma intenção de compra
 	r.Put("/pedidos/{id}/pagar", orderController.Pay)       // Altera o status do pedido para PAID (Pago)
 	r.Put("/pedidos/{id}/cancelar", orderController.Cancel) // Cancela e devolve os produtos ao estoque
