@@ -15,23 +15,37 @@ const (
 	StatusCanceled Status = "CANCELED"
 )
 
-// ErrCannotCancelPaidOrder é retornado ao tentar cancelar um pedido já pago.
-var ErrCannotCancelPaidOrder = errors.New("cannot cancel a paid order")
+var (
+	// ErrCannotCancelPaidOrder é retornado ao tentar cancelar um pedido já pago.
+	ErrCannotCancelPaidOrder = errors.New("cannot cancel a paid order")
+	// ErrEmptyOrder é retornado ao tentar criar um pedido sem itens.
+	ErrEmptyOrder = errors.New("order must contain at least one item")
+)
 
-// Order é a entidade de domínio do pedido.
+// Order é o agregado raiz do pedido.
 // O status só muda via métodos de intenção de negócio (Pay, Cancel).
 type Order struct {
 	id       uuid.UUID
 	clientID uuid.UUID
 	status   Status
+	items    []OrderItem
 }
 
-// NewOrder cria um pedido com status PENDING.
-func NewOrder(clientID uuid.UUID) (*Order, error) {
+// NewOrder cria um pedido com status PENDING e exige pelo menos um item.
+func NewOrder(clientID uuid.UUID, items []OrderItem) (*Order, error) {
+	if len(items) == 0 {
+		return nil, ErrEmptyOrder
+	}
+
+	// Cópia defensiva: o agregado não compartilha o slice externo.
+	copied := make([]OrderItem, len(items))
+	copy(copied, items)
+
 	return &Order{
 		id:       uuid.New(),
 		clientID: clientID,
 		status:   StatusPending,
+		items:    copied,
 	}, nil
 }
 
@@ -48,6 +62,22 @@ func (o *Order) ClientID() uuid.UUID {
 // Status retorna o status atual do pedido.
 func (o *Order) Status() Status {
 	return o.status
+}
+
+// Items retorna uma cópia dos itens do pedido.
+func (o *Order) Items() []OrderItem {
+	copied := make([]OrderItem, len(o.items))
+	copy(copied, o.items)
+	return copied
+}
+
+// CalculateTotal soma os subtotais de todos os itens do pedido.
+func (o *Order) CalculateTotal() float64 {
+	var total float64
+	for _, item := range o.items {
+		total += item.Subtotal()
+	}
+	return total
 }
 
 // Pay aprova o pagamento e altera o status para PAID.
