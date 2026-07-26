@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"pedidos/internal/domain/order"
 	"pedidos/internal/repository/db"
 
 	"github.com/google/uuid"
@@ -47,22 +48,32 @@ func (s *OrderService) Create(ctx context.Context, clienteID uuid.UUID, itens []
 	return &pedido, nil
 }
 
-// Pay altera o status do pedido para 'PAID'
+// Pay refatorado com DDD
 func (s *OrderService) Pay(ctx context.Context, pedidoID uuid.UUID) error {
-	// 1. Verifica se o pedido existe antes de tentar pagar
-	pedido, err := s.queries.GetPedidoByID(ctx, pedidoID)
+	// 1. Busca os dados brutos no banco
+	dbPedido, err := s.queries.GetPedidoByID(ctx, pedidoID)
 	if err != nil {
 		return errors.New("pedido não encontrado")
 	}
 
-	if pedido.Status == "PAID" {
-		return errors.New("este pedido já foi pago")
+	// 2. Transforma o banco na Entidade Pura de Domínio
+	// (Você pode criar um construtor RestaurarPedido em domain/order)
+	domainOrder := order.Restore(
+		dbPedido.ID,
+		dbPedido.ClienteID,
+		order.Status(dbPedido.Status),
+		[]order.OrderItem{},
+	)
+
+	// 3. Executa a REGRA DE NEGÓCIO DO DOMÍNIO (O domínio que sabe se pode pagar!)
+	if err := domainOrder.Pay(); err != nil {
+		return err // Retorna "ErrCannotPay..." validado pelo próprio domínio
 	}
 
-	// 2. Atualiza o status no banco de dados
+	// 4. Salva a alteração no banco
 	return s.queries.UpdatePedidoStatus(ctx, db.UpdatePedidoStatusParams{
 		ID:     pedidoID,
-		Status: "PAID",
+		Status: string(domainOrder.Status()),
 	})
 }
 

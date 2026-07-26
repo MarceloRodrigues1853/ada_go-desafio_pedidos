@@ -95,3 +95,13 @@ func (o *Order) Cancel() error {
 	o.status = StatusCanceled
 	return nil
 }
+
+// Restore reconstitui um pedido existente vindo do banco de dados
+func Restore(id uuid.UUID, clientID uuid.UUID, status Status, items []OrderItem) *Order {
+	return &Order{
+		id:       id,
+		clientID: clientID,
+		status:   status,
+		items:    items,
+	}
+}
