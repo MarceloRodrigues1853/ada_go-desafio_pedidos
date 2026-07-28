@@ -59,7 +59,7 @@ func main() {
 	// =========================================================================
 	// O Service centraliza as regras cruciais (ex: "pedido precisa ter itens", "estoque deve diminuir").
 	// Ele recebe os repositórios necessários para consultar e persistir dados.
-	orderService := service.NewOrderService(queries)
+	orderService := service.NewOrderService(queries, poll)
 
 	// =========================================================================
 	// 5. INJEÇÃO DE DEPENDÊNCIAS - CAMADA DE CONTROLE (HTTP / API)
