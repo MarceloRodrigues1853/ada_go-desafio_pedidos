@@ -39,14 +39,30 @@ func (q *Queries) CreateProduto(ctx context.Context, arg CreateProdutoParams) (P
 	return i, err
 }
 
-const getProdutoByID = `-- name: GetProdutoByID :one
+const devolverEstoque = `-- name: DevolverEstoque :exec
+UPDATE produtos
+SET estoque = estoque + $2
+WHERE id = $1
+`
+
+type DevolverEstoqueParams struct {
+	ID      string `json:"id"`
+	Estoque int32  `json:"estoque"`
+}
+
+func (q *Queries) DevolverEstoque(ctx context.Context, arg DevolverEstoqueParams) error {
+	_, err := q.db.Exec(ctx, devolverEstoque, arg.ID, arg.Estoque)
+	return err
+}
+
+const getProduto = `-- name: GetProduto :one
 SELECT id, nome, preco, estoque
 FROM produtos
 WHERE id = $1 LIMIT 1
 `
 
-func (q *Queries) GetProdutoByID(ctx context.Context, id string) (Produto, error) {
-	row := q.db.QueryRow(ctx, getProdutoByID, id)
+func (q *Queries) GetProduto(ctx context.Context, id string) (Produto, error) {
+	row := q.db.QueryRow(ctx, getProduto, id)
 	var i Produto
 	err := row.Scan(
 		&i.ID,
@@ -86,4 +102,20 @@ func (q *Queries) ListProdutos(ctx context.Context) ([]Produto, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const reduzirEstoque = `-- name: ReduzirEstoque :exec
+UPDATE produtos
+SET estoque = estoque - $2
+WHERE id = $1
+`
+
+type ReduzirEstoqueParams struct {
+	ID      string `json:"id"`
+	Estoque int32  `json:"estoque"`
+}
+
+func (q *Queries) ReduzirEstoque(ctx context.Context, arg ReduzirEstoqueParams) error {
+	_, err := q.db.Exec(ctx, reduzirEstoque, arg.ID, arg.Estoque)
+	return err
 }

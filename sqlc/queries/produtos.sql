@@ -3,7 +3,7 @@ INSERT INTO produtos (id, nome, preco, estoque)
 VALUES ($1, $2, $3, $4)
 RETURNING id, nome, preco, estoque;
 
--- name: GetProdutoByID :one
+-- name: GetProduto :one
 SELECT id, nome, preco, estoque
 FROM produtos
 WHERE id = $1 LIMIT 1;
@@ -12,3 +12,13 @@ WHERE id = $1 LIMIT 1;
 SELECT id, nome, preco, estoque
 FROM produtos
 ORDER BY nome ASC;
+
+-- name: ReduzirEstoque :exec
+UPDATE produtos
+SET estoque = estoque - $2
+WHERE id = $1;
+
+-- name: DevolverEstoque :exec
+UPDATE produtos
+SET estoque = estoque + $2
+WHERE id = $1;

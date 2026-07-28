@@ -62,6 +62,39 @@ func (q *Queries) CreatePedido(ctx context.Context, clienteID uuid.UUID) (Pedido
 	return i, err
 }
 
+const getItensPedido = `-- name: GetItensPedido :many
+SELECT id, pedido_id, produto_id, quantidade, preco_unitario
+FROM itens_pedido
+WHERE pedido_id = $1
+`
+
+// Busca todos os itens cadastrados de um pedido específico
+func (q *Queries) GetItensPedido(ctx context.Context, pedidoID uuid.UUID) ([]ItensPedido, error) {
+	rows, err := q.db.Query(ctx, getItensPedido, pedidoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ItensPedido
+	for rows.Next() {
+		var i ItensPedido
+		if err := rows.Scan(
+			&i.ID,
+			&i.PedidoID,
+			&i.ProdutoID,
+			&i.Quantidade,
+			&i.PrecoUnitario,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPedidoByID = `-- name: GetPedidoByID :one
 SELECT id, cliente_id, status, created_at
 FROM pedidos
@@ -79,6 +112,44 @@ func (q *Queries) GetPedidoByID(ctx context.Context, id uuid.UUID) (Pedido, erro
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const listPedidosPaginado = `-- name: ListPedidosPaginado :many
+SELECT id, cliente_id, status, created_at
+FROM pedidos
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListPedidosPaginadoParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+// Busca pedidos do banco com limite e deslocamento (paginação)
+func (q *Queries) ListPedidosPaginado(ctx context.Context, arg ListPedidosPaginadoParams) ([]Pedido, error) {
+	rows, err := q.db.Query(ctx, listPedidosPaginado, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Pedido
+	for rows.Next() {
+		var i Pedido
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClienteID,
+			&i.Status,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updatePedidoStatus = `-- name: UpdatePedidoStatus :exec

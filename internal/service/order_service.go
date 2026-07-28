@@ -33,7 +33,7 @@ func (s *OrderService) Create(ctx context.Context, clienteID uuid.UUID, itens []
 		return nil, errors.New("cliente não encontrado")
 	}
 
-	// 2. Valida se o pedido contém ao menos 1 item (Invariante)
+	// 2. Valida se o pedido contém ao menos 1 item (Invariante do Domínio)
 	if len(itens) == 0 {
 		return nil, errors.New("o pedido precisa ter pelo menos um item")
 	}
@@ -45,30 +45,26 @@ func (s *OrderService) Create(ctx context.Context, clienteID uuid.UUID, itens []
 	}
 	defer tx.Rollback(ctx) // Garante que se houver erro no meio do caminho, nada é salvo no banco
 
-	// Instancia as queries associadas à transação atual
+	// Cria o objeto de queries associado à transação atual
 	qtx := s.queries.WithTx(tx)
 
 	// 4. Valida produtos e reduz estoque individualmente dentro da transação
 	for _, item := range itens {
-		produtoUUID, err := uuid.Parse(item.ProdutoID)
-		if err != nil {
-			return nil, errors.New("ID do produto inválido")
-		}
-
-		// Busca produto para conferir estoque
-		produto, err := qtx.GetProduto(ctx, produtoUUID)
+		// Como no banco o produto_id é VARCHAR(50), passamos a string diretamente
+		produto, err := qtx.GetProduto(ctx, item.ProdutoID)
 		if err != nil {
 			return nil, errors.New("produto não encontrado")
 		}
 
+		// Comparação ajustada usando o tipo int32 nativo
 		if produto.Estoque < item.Quantidade {
 			return nil, errors.New("estoque insuficiente para o produto")
 		}
 
-		// Reduz o estoque do produto no banco
+		// Reduz o estoque do produto no banco (Estoque mapeia para o parâmetro $2 da query)
 		err = qtx.ReduzirEstoque(ctx, db.ReduzirEstoqueParams{
-			ID:         produtoUUID,
-			Quantidade: item.Quantidade,
+			ID:      item.ProdutoID,
+			Estoque: item.Quantidade,
 		})
 		if err != nil {
 			return nil, errors.New("erro ao atualizar estoque do produto")
@@ -98,7 +94,7 @@ func (s *OrderService) Create(ctx context.Context, clienteID uuid.UUID, itens []
 	return &pedido, nil
 }
 
-// GetByID busca um pedido único pelo ID (NOVO - Requisito do enunciado)
+// GetByID busca um pedido único pelo ID (EXIGIDO NO ENUNCIADO DO DESAFIO)
 func (s *OrderService) GetByID(ctx context.Context, pedidoID uuid.UUID) (*db.Pedido, error) {
 	pedido, err := s.queries.GetPedidoByID(ctx, pedidoID)
 	if err != nil {
@@ -107,7 +103,7 @@ func (s *OrderService) GetByID(ctx context.Context, pedidoID uuid.UUID) (*db.Ped
 	return &pedido, nil
 }
 
-// ListPaginado retorna lista de pedidos com limit e offset (NOVO - Requisito do enunciado)
+// ListPaginado retorna a lista de pedidos com limit e offset (EXIGIDO NO ENUNCIADO DO DESAFIO)
 func (s *OrderService) ListPaginado(ctx context.Context, limit, offset int32) ([]db.Pedido, error) {
 	return s.queries.ListPedidosPaginado(ctx, db.ListPedidosPaginadoParams{
 		Limit:  limit,
@@ -123,7 +119,7 @@ func (s *OrderService) Pay(ctx context.Context, pedidoID uuid.UUID) error {
 		return errors.New("pedido não encontrado")
 	}
 
-	// 2. Transforma em entidade pura do domínio
+	// 2. Transforma em entidade pura do domínio para aplicar regras
 	domainOrder := order.Restore(
 		dbPedido.ID,
 		dbPedido.ClienteID,
@@ -131,7 +127,7 @@ func (s *OrderService) Pay(ctx context.Context, pedidoID uuid.UUID) error {
 		[]order.OrderItem{},
 	)
 
-	// 3. Aplica regra de negócio de pagamento
+	// 3. Aplica regra de negócio de pagamento (Lança erro se já pago ou cancelado)
 	if err := domainOrder.Pay(); err != nil {
 		return err
 	}
@@ -151,7 +147,7 @@ func (s *OrderService) Cancel(ctx context.Context, pedidoID uuid.UUID) error {
 		return errors.New("pedido não encontrado")
 	}
 
-	// Valida se o pedido já está pago ou cancelado (Regra do professor)
+	// Valida se o pedido já está pago ou cancelado
 	if dbPedido.Status == "PAID" {
 		return errors.New("não é possível cancelar um pedido que já foi pago")
 	}
@@ -159,7 +155,7 @@ func (s *OrderService) Cancel(ctx context.Context, pedidoID uuid.UUID) error {
 		return errors.New("este pedido já está cancelado")
 	}
 
-	// 2. Abre transação para devolver o estoque e atualizar o status
+	// 2. Abre transação para devolver o estoque e atualizar o status de forma atômica
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return errors.New("erro ao iniciar transação")
@@ -172,14 +168,11 @@ func (s *OrderService) Cancel(ctx context.Context, pedidoID uuid.UUID) error {
 	itens, err := qtx.GetItensPedido(ctx, pedidoID)
 	if err == nil {
 		for _, item := range itens {
-			produtoUUID, err := uuid.Parse(item.ProdutoID)
-			if err == nil {
-				// Devolve a quantidade para o estoque no banco de dados
-				_ = qtx.DevolverEstoque(ctx, db.DevolverEstoqueParams{
-					ID:         produtoUUID,
-					Quantidade: item.Quantidade,
-				})
-			}
+			// Devolve a quantidade para o estoque usando a struct gerada pelo sqlc (campo Estoque)
+			_ = qtx.DevolverEstoque(ctx, db.DevolverEstoqueParams{
+				ID:      item.ProdutoID,
+				Estoque: item.Quantidade,
+			})
 		}
 	}
 
@@ -192,6 +185,6 @@ func (s *OrderService) Cancel(ctx context.Context, pedidoID uuid.UUID) error {
 		return errors.New("erro ao atualizar status do pedido")
 	}
 
-	// 5. Confirma as alterações no banco
+	// 5. Confirma as alterações no banco (Commit)
 	return tx.Commit(ctx)
 }

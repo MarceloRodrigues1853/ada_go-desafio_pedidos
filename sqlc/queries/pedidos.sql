@@ -21,3 +21,16 @@ WHERE id = $1;
 SELECT id, cliente_id, status, created_at
 FROM pedidos
 WHERE id = $1 LIMIT 1;
+
+-- name: GetItensPedido :many
+-- Busca todos os itens cadastrados de um pedido específico
+SELECT id, pedido_id, produto_id, quantidade, preco_unitario
+FROM itens_pedido
+WHERE pedido_id = $1;
+
+-- name: ListPedidosPaginado :many
+-- Busca pedidos do banco com limite e deslocamento (paginação)
+SELECT id, cliente_id, status, created_at
+FROM pedidos
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2;

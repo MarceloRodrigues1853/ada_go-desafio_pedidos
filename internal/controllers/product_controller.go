@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"pedidos/internal/repository/db"
+
+	"github.com/go-chi/chi/v5"
 )
 
 // ProductController gerencia o fluxo de dados entre as requisições HTTP e a tabela de produtos no banco
@@ -61,7 +63,30 @@ func (c *ProductController) List(w http.ResponseWriter, r *http.Request) {
 
 	// 2. Configura a resposta como formato JSON
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 
-	// 3. Retorna a lista completa com os dados do seed ou novos cadastros
+	// 3. Retorna a lista completa de produtos
 	json.NewEncoder(w).Encode(produtos)
+}
+
+// GetByID lida com a rota GET /produtos/{id} (EXIGIDO NO ENUNCIADO DO DESAFIO)
+func (c *ProductController) GetByID(w http.ResponseWriter, r *http.Request) {
+	// 1. Extrai o ID da URL (Como no banco é VARCHAR(50), pegamos diretamente como string)
+	idParam := chi.URLParam(r, "id")
+	if idParam == "" {
+		http.Error(w, "ID do produto inválido", http.StatusBadRequest) // Status 400
+		return
+	}
+
+	// 2. Executa a busca SQL no banco via sqlc
+	produto, err := c.queries.GetProduto(r.Context(), idParam)
+	if err != nil {
+		http.Error(w, "Produto não encontrado", http.StatusNotFound) // Status 404
+		return
+	}
+
+	// 3. Retorna o produto encontrado em formato JSON
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(produto)
 }

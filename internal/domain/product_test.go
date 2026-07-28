@@ -1,98 +1,108 @@
-package main
+package domain_test
 
 import (
-	// Pacotes nativos do Go
-	"context"  // Gerencia o ciclo de vida e timeouts de conexões
-	"log"      // Exibe logs formatados no terminal
-	"net/http" // Servidor e rotas HTTP
-	"os"       // Interage com o sistema operacional e lê variáveis do .env
+	"testing"
 
-	// Camadas internas da aplicação
-	"pedidos/internal/controllers"   // Handlers Web
-	"pedidos/internal/repository/db" // Acesso ao banco via sqlc
-	"pedidos/internal/service"       // Regras de negócio da aplicação
-
-	// Bibliotecas de terceiros
-	"github.com/go-chi/chi/v5"            // Roteador HTTP
-	"github.com/go-chi/chi/v5/middleware" // Middlewares de log e recuperação de pânicos
-	"github.com/jackc/pgx/v5/pgxpool"     // Gerenciador de pool de conexões do Postgres
-	"github.com/joho/godotenv"            // Carregador do arquivo .env
+	// Importa o pacote de domínio local
+	"pedidos/internal/domain"
 )
 
-func main() {
-	// =========================================================================
-	// 1. CONFIGURAÇÃO DO AMBIENTE (.env)
-	// =========================================================================
-	if err := godotenv.Load(); err != nil {
-		log.Println("Aviso: Arquivo .env não encontrado. O sistema tentará usar variáveis nativas.")
-	}
+// TestNovoProduto_Sucesso valida a criação de um produto com dados corretos
+func TestNovoProduto_Sucesso(t *testing.T) {
+	// Dados de entrada válidos
+	id := "P001"
+	nome := "Teclado Mecânico"
+	preco := 250.00
+	estoque := 10
 
-	// =========================================================================
-	// 2. CONEXÃO COM O BANCO DE DADOS (POSTGRESQL VIA PGXPOOL)
-	// =========================================================================
-	dbUrl := os.Getenv("DB_URL")
-	if dbUrl == "" {
-		log.Fatal("Erro Crítico: A variável de ambiente DB_URL não foi definida no arquivo .env")
-	}
+	// Executa o construtor do domínio
+	p, err := domain.NovoProduto(id, nome, preco, estoque)
 
-	// Cria o pool de conexões para reutilização eficiente
-	pool, err := pgxpool.New(context.Background(), dbUrl)
+	// Valida se a criação ocorreu sem erros
 	if err != nil {
-		log.Fatalf("Erro Crítico ao tentar conectar ao banco de dados: %v", err)
-	}
-	defer pool.Close() // Fecha o pool com segurança ao encerrar o programa
-
-	log.Println("📦 Conexão com o PostgreSQL estabelecida com sucesso!")
-
-	// =========================================================================
-	// 3. INJEÇÃO DE DEPENDÊNCIAS
-	// =========================================================================
-	queries := db.New(pool)
-
-	// Instancia a camada de serviço enviando o banco de dados
-	orderService := service.NewOrderService(queries)
-
-	// Instancia os controladores HTTP
-	clientController := controllers.NewClientController(queries)
-	productController := controllers.NewProductController(queries)
-	orderController := controllers.NewOrderController(orderService)
-
-	// =========================================================================
-	// 4. CONFIGURAÇÃO DE ROTAS E MIDDLEWARES (CHI ROUTER)
-	// =========================================================================
-	r := chi.NewRouter()
-
-	r.Use(middleware.Logger)    // Loga cada requisição HTTP no console
-	r.Use(middleware.Recoverer) // Evita crash da aplicação em caso de erro grave
-
-	// --- ROTAS DA ENTIDADE: CLIENTES ---
-	r.Post("/clientes", clientController.Create)      // POST /clientes
-	r.Get("/clientes", clientController.List)         // GET /clientes
-	r.Get("/clientes/{id}", clientController.GetByID) // GET /clientes/{id} (EXIGIDO)
-
-	// --- ROTAS DA ENTIDADE: PRODUTOS ---
-	r.Post("/produtos", productController.Create)      // POST /produtos
-	r.Get("/produtos", productController.List)         // GET /produtos
-	r.Get("/produtos/{id}", productController.GetByID) // GET /produtos/{id} (EXIGIDO)
-
-	// --- ROTAS DA ENTIDADE: PEDIDOS ---
-	r.Post("/pedidos", orderController.Create)               // POST /pedidos
-	r.Get("/pedidos", orderController.ListPaginado)          // GET /pedidos?limit=10&offset=0 (EXIGIDO)
-	r.Get("/pedidos/{id}", orderController.GetByID)          // GET /pedidos/{id} (EXIGIDO)
-	r.Post("/pedidos/{id}/pagar", orderController.Pay)       // POST /pedidos/{id}/pagar (Ajustado verbo POST)
-	r.Post("/pedidos/{id}/cancelar", orderController.Cancel) // POST /pedidos/{id}/cancelar (Ajustado verbo POST)
-
-	// =========================================================================
-	// 5. INICIALIZAÇÃO DO SERVIDOR HTTP
-	// =========================================================================
-	porta := os.Getenv("PORT")
-	if porta == "" {
-		porta = "8080"
+		t.Fatalf("esperava sucesso ao criar produto, mas recebeu erro: %v", err)
 	}
 
-	log.Printf("🚀 Servidor HTTP inicializado com sucesso na porta %s\n", porta)
-
-	if err := http.ListenAndServe(":"+porta, r); err != nil {
-		log.Fatalf("Erro Fatal: Não foi possível iniciar o servidor HTTP: %v", err)
+	// Valida se os atributos foram atribuídos corretamente
+	if p.ID != id || p.Nome != nome || p.Preco != preco || p.Estoque != estoque {
+		t.Errorf("dados do produto criados incorretamente. Recebeu: %+v", p)
 	}
+}
+
+// TestNovoProduto_Validacao testa todas as invariantes da função validarProduto()
+func TestNovoProduto_Validacao(t *testing.T) {
+	// Subteste 1: ID vazio
+	t.Run("ID vazio deve retornar ErrProdutoInvalido", func(t *testing.T) {
+		_, err := domain.NovoProduto("", "Teclado", 100.0, 5)
+		if err != domain.ErrProdutoInvalido {
+			t.Errorf("esperava ErrProdutoInvalido, mas recebeu: %v", err)
+		}
+	})
+
+	// Subteste 2: Nome vazio
+	t.Run("Nome vazio deve retornar ErrProdutoInvalido", func(t *testing.T) {
+		_, err := domain.NovoProduto("P001", "", 100.0, 5)
+		if err != domain.ErrProdutoInvalido {
+			t.Errorf("esperava ErrProdutoInvalido, mas recebeu: %v", err)
+		}
+	})
+
+	// Subteste 3: Preço menor ou igual a zero
+	t.Run("Preco menor ou igual a zero deve retornar ErrProdutoInvalido", func(t *testing.T) {
+		_, err := domain.NovoProduto("P001", "Teclado", 0.0, 5)
+		if err != domain.ErrProdutoInvalido {
+			t.Errorf("esperava ErrProdutoInvalido para preco 0, mas recebeu: %v", err)
+		}
+	})
+
+	// Subteste 4: Estoque negativo na criação
+	t.Run("Estoque negativo deve retornar ErrProdutoInvalido", func(t *testing.T) {
+		_, err := domain.NovoProduto("P001", "Teclado", 100.0, -1)
+		if err != domain.ErrProdutoInvalido {
+			t.Errorf("esperava ErrProdutoInvalido para estoque negativo, mas recebeu: %v", err)
+		}
+	})
+}
+
+// TestProduto_GerenciamentoEstoque testa os métodos de movimentação de estoque
+func TestProduto_GerenciamentoEstoque(t *testing.T) {
+	// Cria um produto base com 10 unidades para os testes
+	p, err := domain.NovoProduto("P001", "Teclado", 100.0, 10)
+	if err != nil {
+		t.Fatalf("erro ao criar produto para teste de estoque: %v", err)
+	}
+
+	// Teste de Redução de Estoque com sucesso
+	t.Run("ReduzirEstoque com saldo suficiente deve subtrair corretamente", func(t *testing.T) {
+		err := p.ReduzirEstoque(3) // Reduz 3 de 10
+		if err != nil {
+			t.Fatalf("nao esperava erro ao reduzir estoque, recebeu: %v", err)
+		}
+
+		if p.Estoque != 7 {
+			t.Errorf("esperava estoque igual a 7, mas obteve %d", p.Estoque)
+		}
+	})
+
+	// Teste de Redução de Estoque maior que o saldo (Invariante)
+	t.Run("ReduzirEstoque sem saldo deve retornar ErrEstoqueInsuficiente", func(t *testing.T) {
+		// O estoque atual é 7. Tentamos tirar 10.
+		err := p.ReduzirEstoque(10)
+		if err != domain.ErrEstoqueInsuficiente {
+			t.Errorf("esperava ErrEstoqueInsuficiente, mas recebeu: %v", err)
+		}
+
+		// Garante que o estoque não ficou negativo após a tentativa
+		if p.Estoque != 7 {
+			t.Errorf("estoque nao deveria ter alterado, esperava 7, obteve %d", p.Estoque)
+		}
+	})
+
+	// Teste de Devolução de Estoque
+	t.Run("DevolverEstoque deve somar ao saldo atual", func(t *testing.T) {
+		p.DevolverEstoque(5) // Soma 5 ao saldo atual de 7
+		if p.Estoque != 12 {
+			t.Errorf("esperava estoque igual a 12, mas obteve %d", p.Estoque)
+		}
+	})
 }
