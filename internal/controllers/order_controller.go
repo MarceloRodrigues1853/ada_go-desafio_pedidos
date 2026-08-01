@@ -1,24 +1,33 @@
 package controllers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
 
 	"pedidos/internal/repository/db"
-	"pedidos/internal/service"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
+// Definimos a interface do que o Controller espera do Service
+type OrderServiceInterface interface {
+	Create(ctx context.Context, clienteID uuid.UUID, itens []db.CreateItemPedidoParams) (*db.Pedido, error)
+	GetByID(ctx context.Context, pedidoID uuid.UUID) (*db.Pedido, error)
+	ListPaginado(ctx context.Context, limit, offset int32) ([]db.Pedido, error)
+	Pay(ctx context.Context, pedidoID uuid.UUID) error
+	Cancel(ctx context.Context, pedidoID uuid.UUID) error
+}
+
 // OrderController coordena as requisições HTTP para a entidade Pedido
 type OrderController struct {
-	service *service.OrderService
+	service OrderServiceInterface
 }
 
 // NewOrderController cria uma nova instância do controller injetando a camada de serviço
-func NewOrderController(service *service.OrderService) *OrderController {
+func NewOrderController(service OrderServiceInterface) *OrderController {
 	return &OrderController{
 		service: service,
 	}
