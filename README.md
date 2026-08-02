@@ -132,6 +132,8 @@ go test -count=1 -cover ./...
 
 - **internal/domain**: ~95.5% de cobertura nas entidades puras.
 
+![testes_unitarios](./assets/testes_unitarios.png)
+
 ---
 
 ## 🧪 Exemplos de Uso e Testes no Terminal(Cenários)
