@@ -8,35 +8,67 @@ O projeto evoluiu de uma simulação no terminal para uma **API Web 100% funcion
 Construir o núcleo de um serviço de pedidos isolando as regras de negócio puras de frameworks externos. A aplicação simula um ambiente de **e-commerce**, protegendo a integridade do banco de dados e garantindo regras como: não vender sem estoque, validar a existência de clientes e impedir mudanças de status inválidas (ex: **cancelar um pedido já pago**).
 
 ## 🏗️ Arquitetura e Estrutura
-O projeto foi estruturado seguindo padrões modernos do ecossistema Go, substituindo repositórios em memória por persistência real e tipagem estrita:
 
-* `cmd/app/` : Ponto de entrada da aplicação, configuração de dependências e orquestrador do servidor HTTP (**go-chi**).
-* `internal/controllers/` : Camada Web. Traduz as requisições JSON da internet para UUIDs e tipos nativos do sistema.
-* `internal/repository/db/` : Camada de dados com código gerado automaticamente pelo **sqlc**, garantindo acesso seguro e tipado ao PostgreSQL.
-* `internal/service/` : Orquestrador dos casos de uso (**Criar Pedido, Pagar, Cancelar**), coordenando a validação de regras antes de acionar o banco.
-* `migrations/` & `sqlc/` : Arquivos de infraestrutura para criação das tabelas e estruturação das consultas SQL.
+O projeto segue os princípios da **Clean Architecture** e **Domain-Driven Design (DDD)**, garantindo desacoplamento entre a regra de negócio pura e a infraestrutura externa (banco de dados, servidor HTTP e frameworks). 
+
+### 📐 Divisão das Camadas:
+
+* **`cmd/app/`**: Ponto de entrada da aplicação (`main.go`). Lê variáveis de ambiente (`.env`), estabelece o pool de conexões com o PostgreSQL (`pgxpool`) e registra as rotas no roteador **go-chi**.
+* **`internal/domain/`**: **Núcleo Puro (Core Domain)**. Contém as entidades, objetos de valor e invariantes da aplicação. Isento de qualquer dependência de banco de dados ou pacote externo.
+* **`internal/service/`**: **Casos de Uso (Use Cases)**. Orquestra a execução das regras de negócio, gerencia transações atômicas no PostgreSQL via `pgxpool` (garantindo consistência no estoque) e expõe interfaces para a camada web.
+* **`internal/controllers/`**: **Adaptadores de Entrada (Handlers HTTP)**. Converte payloads JSON em structs tipadas do Go, valida UUIDs de entrada e traduz os retornos em respostas HTTP REST (`200 OK`, `201 Created`, `400 Bad Request`, `404 Not Found`, `409 Conflict`).
+* **`internal/repository/db/`**: **Adaptador de Persistência**. Código Go fortemente tipado gerado automaticamente pelo **sqlc** a partir das consultas SQL puras.
+* **`migrations/` & `sqlc/`**: Infraestrutura de versionamento do schema do banco de dados e arquivos de queries SQL.
+
+---
+
+### 📂 Árvore de Arquivos do Projeto:
 
 ```text
 pedidos/
-├── cmd/app/
-│   └── main.go                  # Ponto de entrada, injeção de dependências e roteador
+├── cmd/
+│   └── app/
+│       └── main.go                         # Ponto de entrada, injeção de dependências e servidor HTTP
 ├── internal/
-│   ├── controllers/             # Handlers HTTP
+│   ├── controllers/                        # Handlers HTTP REST e suíte de testes unitários da API
 │   │   ├── client_controller.go
+│   │   ├── client_controller_test.go
 │   │   ├── order_controller.go
-│   │   └── product_controller.go
-│   ├── repository/db/           # Código de persistência gerado via sqlc + pgx
-│   └── service/
-│       └── order_service.go     # Casos de uso e regras de negócio
-├── migrations/                  # Arquivos de versionamento do banco (.sql)
-├── sqlc/queries/                # Consultas SQL para geração de código
-├── .env                         # Variáveis de ambiente e secrets
-├── Makefile                     # Automação de comandos
-└── sqlc.yaml                    # Configuração de mapeamento e overrides de tipos (UUID, Decimal)
+│   │   ├── order_controller_test.go
+│   │   ├── product_controller.go
+│   │   └── product_controller_test.go
+│   ├── domain/                             # Entidades puras, agregados e validações de invariantes
+│   │   ├── client.go
+│   │   ├── client_test.go
+│   │   ├── errors.go
+│   │   ├── product.go
+│   │   ├── product_test.go
+│   │   └── order/
+│   │       ├── order.go
+│   │       ├── order_item.go
+│   │       ├── order_test.go
+│   │       └── status.go
+│   ├── repository/
+│   │   └── db/                             # Persistência tipada gerada automaticamente via sqlc + pgx
+│   │       ├── clientes.sql.go
+│   │       ├── db.go
+│   │       ├── models.go
+│   │       ├── pedidos.sql.go
+│   │       └── produtos.sql.go
+│   └── service/                            
+│       ├── order_service.go                    # Criação atômica, pagamento e cancelamento com estorno
+│       └── order_service_integration_test.go   # Orquestração dos casos de uso e testes de integração
+├── migrations/                             # Versionamento do schema PostgreSQL (.sql)
+├── sqlc/
+│   └── queries/                            # Consultas SQL mapeadas para geração do sqlc
+├── .env                                    # Variáveis de ambiente
+├── docker-compose.yml                      # Containerização do banco PostgreSQL
+├── Makefile                                # Automatisador de rotinas (make run, make migrate-up)
+├── sqlc.yaml                               # Configuração e overrides de tipos do sqlc (UUID, Decimal)
+└── README.md
 ```
 
-Padrões: Clean Architecture, Dependency Injection, Interface Segregation.
-Orquestrador dos casos de uso (Criar Pedido, Pagar, Cancelar), coordenando a comunicação entre o Domínio e a camada de Dados.
+Padrões Utilizados: Clean Architecture, Domain-Driven Design (DDD), Dependency Injection (DI), Interface Segregation Principle (ISP), Transaction Script / Unit of Work.
 
 ## 🚀 Como Executar
 
@@ -86,6 +118,19 @@ make run
 **PUT** /pedidos/{id}/pagar -> Aprova pagamento e altera status para PAID.
 
 **PUT** /pedidos/{id}/cancelar -> Cancela venda (apenas se estiver pendente) e altera status para CANCELED.
+
+---
+## Cobertura de Testes Automatizados
+O projeto possui suíte de testes unitários e de integração validando desde as regras de domínio até os fluxos de borda da API Web:
+
+```bash
+go test -count=1 -cover ./...
+```
+- **internal/controllers**: ~54.1% de cobertura de declarações.
+
+- **internal/service**: ~49.2% de cobertura (**Testes de Integração em banco com pgxpool**).
+
+- **internal/domain**: ~95.5% de cobertura nas entidades puras.
 
 ---
 
@@ -165,4 +210,4 @@ Abaixo estão os resultados das requisições reais feitas à API, comprovando o
 - **Tipagem**: UUIDs oficiais do Google (`google/uuid`)
 
 ---
-*Desenvolvido como parte do módulo de backend em Go da Ada Tech.*
+*Desenvolvido como parte do módulo de backend em Go da Ada Tech (Formação GO / Ser+Tech).*
