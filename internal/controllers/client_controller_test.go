@@ -2,52 +2,130 @@ package controllers_test
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"pedidos/internal/controllers"
+	"pedidos/internal/repository/db"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 )
 
-// TestClientController_Create_InvalidJSON valida a resposta 400 ao enviar um JSON malformado
-func TestClientController_Create_InvalidJSON(t *testing.T) {
-	// 1. Instancia o controller passando nil para as queries (pois a validação ocorre antes de chamar o banco)
-	controller := controllers.NewClientController(nil)
-
-	// 2. Prepara uma requisição HTTP com JSON inválido no corpo
-	jsonInvalido := []byte(`{"name": "Marcelo", "email":}`)
-	req := httptest.NewRequest(http.MethodPost, "/clientes", bytes.NewBuffer(jsonInvalido))
-	req.Header.Set("Content-Type", "application/json")
-
-	// 3. Cria o ResponseRecorder para capturar a resposta
-	rr := httptest.NewRecorder()
-
-	// 4. Executa a função do controller diretamente
-	controller.Create(rr, req)
-
-	// 5. Valida se o status retornado foi 400 Bad Request
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("esperava status 400 Bad Request, mas recebeu %d", rr.Code)
+func setupDB(t *testing.T) (*db.Queries, *pgxpool.Pool) {
+	_ = godotenv.Load("../../.env")
+	dbUrl := os.Getenv("DB_URL")
+	if dbUrl == "" {
+		t.Skip("DB_URL não configurada no .env")
 	}
+
+	pool, err := pgxpool.New(context.Background(), dbUrl)
+	if err != nil {
+		t.Fatalf("Erro ao conectar no banco: %v", err)
+	}
+
+	return db.New(pool), pool
 }
 
-// TestClientController_GetByID_InvalidUUID valida a resposta 400 ao passar um ID em formato inválido
-func TestClientController_GetByID_InvalidUUID(t *testing.T) {
-	controller := controllers.NewClientController(nil)
+func TestClientController_Full(t *testing.T) {
+	queries, pool := setupDB(t)
+	defer pool.Close()
 
-	// Prepara a rota com parâmetro de URL falso via chi.Mux
+	ctrl := controllers.NewClientController(queries)
 	r := chi.NewRouter()
-	r.Get("/clientes/{id}", controller.GetByID)
+	r.Post("/clientes", ctrl.Create)
+	r.Get("/clientes", ctrl.List)
+	r.Get("/clientes/{id}", ctrl.GetByID)
 
-	req := httptest.NewRequest(http.MethodGet, "/clientes/id-invalido-123", nil)
-	rr := httptest.NewRecorder()
+	// 1. Bad Request
+	t.Run("POST /clientes - Body Invalido", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/clientes", bytes.NewBufferString("bad-json"))
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("esperava 400, obteve %d", rr.Code)
+		}
+	})
 
-	r.ServeHTTP(rr, req)
+	// 2. Criar Cliente Sucesso (201)
+	emailUnico := "teste_ctrl_" + uuid.New().String()[:8] + "@email.com"
+	var clienteCriado db.Cliente
 
-	// Rota sem ID deve ser interceptada pelo roteador Chi ou retornar 400
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("esperava status 400 para UUID invalido, mas recebeu %d", rr.Code)
-	}
+	t.Run("POST /clientes - Sucesso", func(t *testing.T) {
+		payload := map[string]string{
+			"name":     "Marcelo Teste",
+			"email":    emailUnico,
+			"password": "senha123_segura",
+		}
+		body, _ := json.Marshal(payload)
+
+		req := httptest.NewRequest(http.MethodPost, "/clientes", bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("esperava 201 Created, obteve %d", rr.Code)
+		}
+
+		_ = json.NewDecoder(rr.Body).Decode(&clienteCriado)
+	})
+
+	// 3. Email Duplicado (409 Conflict)
+	t.Run("POST /clientes - Email Duplicado (409)", func(t *testing.T) {
+		payload := map[string]string{
+			"name":     "Marcelo Duplicado",
+			"email":    emailUnico,
+			"password": "senha123_segura",
+		}
+		body, _ := json.Marshal(payload)
+
+		req := httptest.NewRequest(http.MethodPost, "/clientes", bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusConflict {
+			t.Errorf("esperava 409 Conflict, obteve %d", rr.Code)
+		}
+	})
+
+	// 4. Listar Clientes (200 OK)
+	t.Run("GET /clientes - Sucesso", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/clientes", nil)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("esperava 200 OK, obteve %d", rr.Code)
+		}
+	})
+
+	// 5. Buscar Cliente por ID Sucesso (200 OK)
+	t.Run("GET /clientes/{id} - Sucesso", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/clientes/"+clienteCriado.ID.String(), nil)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("esperava 200 OK, obteve %d", rr.Code)
+		}
+	})
+
+	// 6. UUID Invalido (400 Bad Request)
+	t.Run("GET /clientes/{id} - UUID Invalido", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/clientes/id-falso", nil)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("esperava 400, obteve %d", rr.Code)
+		}
+	})
 }

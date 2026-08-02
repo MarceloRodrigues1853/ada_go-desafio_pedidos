@@ -7,46 +7,56 @@ import (
 	"testing"
 
 	"pedidos/internal/controllers"
+	"pedidos/internal/service"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
-// TestOrderController_Create_InvalidUUID valida recusa de cliente_id malformado
-func TestOrderController_Create_InvalidUUID(t *testing.T) {
-	controller := controllers.NewOrderController(nil)
+func TestOrderController_Full(t *testing.T) {
+	queries, pool := setupDB(t)
+	defer pool.Close()
 
-	payload := []byte(`{
-		"cliente_id": "id-invalido-abc",
-		"itens": []
-	}`)
+	srv := service.NewOrderService(queries, pool)
+	ctrl := controllers.NewOrderController(srv)
 
-	req := httptest.NewRequest(http.MethodPost, "/pedidos", bytes.NewBuffer(payload))
-	req.Header.Set("Content-Type", "application/json")
-
-	rr := httptest.NewRecorder()
-	controller.Create(rr, req)
-
-	// Rota sem ID deve ser interceptada pelo roteador Chi ou retornar 400
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("esperava status 400 Bad Request para UUID invalido, obteve %d", rr.Code)
-	}
-}
-
-// TestOrderController_Pay_InvalidURLParam valida recusa de acionar pagamento com ID quebrado
-func TestOrderController_Pay_InvalidURLParam(t *testing.T) {
-	controller := controllers.NewOrderController(nil)
-
-	// Prepara a rota com parâmetro de URL falso via chi.Mux
 	r := chi.NewRouter()
-	r.Post("/pedidos/{id}/pagar", controller.Pay)
+	r.Post("/pedidos", ctrl.Create)
+	r.Get("/pedidos", ctrl.ListPaginado)
+	r.Get("/pedidos/{id}", ctrl.GetByID)
+	r.Post("/pedidos/{id}/pagar", ctrl.Pay)
+	r.Post("/pedidos/{id}/cancelar", ctrl.Cancel)
 
-	req := httptest.NewRequest(http.MethodPost, "/pedidos/uuid-falso/pagar", nil)
-	rr := httptest.NewRecorder()
+	// 1. Listar Paginado Sucesso (200 OK)
+	t.Run("GET /pedidos - Sucesso Paginado", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/pedidos?limit=5&offset=0", nil)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
 
-	r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("esperava 200 OK, obteve %d", rr.Code)
+		}
+	})
 
-	// Rota sem ID deve ser interceptada pelo roteador Chi ou retornar 400
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("esperava status 400 Bad Request para ID de pedido invalido, obteve %d", rr.Code)
-	}
+	// 2. Pedido Não Encontrado (404 Not Found)
+	t.Run("GET /pedidos/{id} - Nao Encontrado (404)", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/pedidos/"+uuid.New().String(), nil)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("esperava 404 Not Found, obteve %d", rr.Code)
+		}
+	})
+
+	// 3. Body invalido na criacao
+	t.Run("POST /pedidos - Body Invalido (400)", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/pedidos", bytes.NewBufferString("json-quebrado"))
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("esperava 400 Bad Request, obteve %d", rr.Code)
+		}
+	})
 }
