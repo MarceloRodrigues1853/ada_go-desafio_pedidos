@@ -94,4 +94,22 @@ func TestOrderService_Integration_CreateAndCancel(t *testing.T) {
 	if err == nil {
 		t.Error("Esperava erro ao tentar cancelar pedido já pago, mas obteve nil")
 	}
+
+	// GetByID
+	achado, err := srv.GetByID(ctx, pedidoSalvo.ID)
+	if err != nil {
+		t.Fatalf("GetByID falhou: %v", err)
+	}
+	if achado.ID != pedidoSalvo.ID {
+		t.Errorf("ID diferente")
+	}
+
+	// ListPaginado
+	lista, err := srv.ListPaginado(ctx, 10, 0)
+	if err != nil {
+		t.Fatalf("ListPaginado falhou: %v", err)
+	}
+	if len(lista) == 0 {
+		t.Errorf("esperava pelo menos 1 pedido na lista")
+	}
 }

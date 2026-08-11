@@ -2,11 +2,13 @@ package controllers_test
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"pedidos/internal/controllers"
+	"pedidos/internal/repository/db"
 	"pedidos/internal/service"
 
 	"github.com/go-chi/chi/v5"
@@ -57,6 +59,124 @@ func TestOrderController_Full(t *testing.T) {
 
 		if rr.Code != http.StatusBadRequest {
 			t.Errorf("esperava 400 Bad Request, obteve %d", rr.Code)
+		}
+	})
+
+	// 4. ID invalido ao pagar
+	t.Run("POST /pedidos/{id}/pagar - ID Invalido (400)", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/pedidos/nao-e-uuid/pagar", nil)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusBadRequest { //retorna 400 Bad Request se o ID for invalido
+			t.Errorf("esperava 400 Bad Request, obteve %d", rr.Code)
+		}
+	})
+
+	// 5. Pagar pedido que não existe
+	t.Run("POST /pedidos/{id}/pagar - Pedido inexistente", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/pedidos/"+uuid.New().String()+"/pagar", nil)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusConflict { //retorna 409 Conflict se o pedido não existir
+			t.Errorf("esperava 409, obteve %d", rr.Code)
+		}
+	})
+
+	// 6. Pagar pedido com sucesso (200)
+	t.Run("POST /pedidos/{id}/pagar - Sucesso (200)", func(t *testing.T) {
+		ctx := context.Background()
+
+		// --- PREPARAR: igual ao order_service_integration_test ---
+		cliente, err := queries.CreateCliente(ctx, db.CreateClienteParams{
+			Name:         "Cliente Ctrl Pagar",
+			Email:        "ctrl_pay_" + uuid.New().String()[:8] + "@email.com",
+			PasswordHash: "hash123",
+		})
+		if err != nil {
+			t.Fatalf("falha ao criar cliente: %v", err)
+		}
+
+		produto, err := queries.CreateProduto(ctx, db.CreateProdutoParams{
+			ID:      "PROD_PAY_" + uuid.New().String()[:5],
+			Nome:    "Mouse Teste",
+			Preco:   50.0,
+			Estoque: 10,
+		})
+		if err != nil {
+			t.Fatalf("falha ao criar produto: %v", err)
+		}
+
+		itens := []db.CreateItemPedidoParams{
+			{
+				ProdutoID:     produto.ID,
+				Quantidade:    1,
+				PrecoUnitario: produto.Preco,
+			},
+		}
+
+		pedido, err := srv.Create(ctx, cliente.ID, itens)
+		if err != nil {
+			t.Fatalf("falha ao criar pedido: %v", err)
+		}
+
+		// --- AGIR: agora sim via HTTP (o que o controller faz) ---
+		req := httptest.NewRequest(http.MethodPost, "/pedidos/"+pedido.ID.String()+"/pagar", nil)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		// --- CONFERIR ---
+		if rr.Code != http.StatusOK {
+			t.Fatalf("esperava 200 OK, obteve %d, body: %s", rr.Code, rr.Body.String())
+		}
+	})
+
+	// 7. Cancelar pedido com sucesso (200)
+	t.Run("POST /pedidos/{id}/cancelar - Sucesso (200)", func(t *testing.T) {
+		ctx := context.Background()
+
+		// --- PREPARAR: igual ao order_service_integration_test ---
+		cliente, err := queries.CreateCliente(ctx, db.CreateClienteParams{
+			Name:         "Cliente Ctrl Cancelar",
+			Email:        "ctrl_cancel_" + uuid.New().String()[:8] + "@email.com",
+			PasswordHash: "hash123",
+		})
+		if err != nil {
+			t.Fatalf("falha ao criar cliente: %v", err)
+		}
+
+		produto, err := queries.CreateProduto(ctx, db.CreateProdutoParams{
+			ID:      "PROD_CANCEL_" + uuid.New().String()[:5],
+			Nome:    "Mouse Teste",
+			Preco:   50.0,
+			Estoque: 10,
+		})
+		if err != nil {
+			t.Fatalf("falha ao criar produto: %v", err)
+		}
+
+		itens := []db.CreateItemPedidoParams{
+			{
+				ProdutoID:     produto.ID,
+				Quantidade:    1,
+				PrecoUnitario: produto.Preco,
+			},
+		}
+
+		pedido, err := srv.Create(ctx, cliente.ID, itens)
+		if err != nil {
+			t.Fatalf("falha ao criar pedido: %v", err)
+		}
+
+		// --- NÃO chama Pay aqui — pedido continua PENDING ---
+		req := httptest.NewRequest(http.MethodPost, "/pedidos/"+pedido.ID.String()+"/cancelar", nil)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		// --- CONFERIR ---
+		if rr.Code != http.StatusOK {
+			t.Fatalf("esperava 200 OK, obteve %d, body: %s", rr.Code, rr.Body.String())
 		}
 	})
 }
