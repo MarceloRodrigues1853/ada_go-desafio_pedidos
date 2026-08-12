@@ -11,6 +11,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// Definimos a interface do que o Controller espera do Service
+type OrderServiceInterface interface {
+	Create(ctx context.Context, clienteID uuid.UUID, itens []db.CreateItemPedidoParams) (*db.Pedido, error)
+	GetByID(ctx context.Context, pedidoID uuid.UUID) (*db.Pedido, error)
+	ListPaginado(ctx context.Context, limit, offset int32) ([]db.Pedido, error)
+	Pay(ctx context.Context, pedidoID uuid.UUID) error
+	Cancel(ctx context.Context, pedidoID uuid.UUID) error
+}
+
 // OrderService coordena os casos de uso de pedidos e depende das queries do sqlc e do pool para transações
 type OrderService struct {
 	queries *db.Queries

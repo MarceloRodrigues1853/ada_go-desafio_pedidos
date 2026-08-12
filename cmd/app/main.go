@@ -2,8 +2,9 @@ package main
 
 import (
 	// Pacotes nativos do Go
-	"context"  // Gerencia o ciclo de vida e timeouts de conexões
-	"log"      // Exibe logs formatados no terminal
+	"context" // Gerencia o ciclo de vida e timeouts de conexões
+	// Exibe logs formatados no terminal
+	"log/slog" // Logs estruturados
 	"net/http" // Servidor e rotas HTTP
 	"os"       // Interage com o sistema operacional e lê variáveis do .env
 
@@ -21,10 +22,15 @@ import (
 
 func main() {
 	// =========================================================================
-	// 1. CONFIGURAÇÃO DO AMBIENTE (.env)
+	// 1. CONFIGURAÇÃO DE LOGS (SLOG JSON) E AMBIENTE (.env)
 	// =========================================================================
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
 	if err := godotenv.Load(); err != nil {
-		log.Println("Aviso: Arquivo .env não encontrado. O sistema tentará usar variáveis nativas.")
+		logger.Warn("Arquivo .env não encontrado. O sistema tentará usar variáveis nativas.")
 	}
 
 	// =========================================================================
@@ -32,27 +38,31 @@ func main() {
 	// =========================================================================
 	dbUrl := os.Getenv("DB_URL")
 	if dbUrl == "" {
-		log.Fatal("Erro Crítico: A variável de ambiente DB_URL não foi definida no arquivo .env")
+		logger.Error("A variável de ambiente DB_URL não foi definida no arquivo .env")
+		os.Exit(1)
 	}
 
-	// Cria o pool de conexões para reutilização eficiente
 	pool, err := pgxpool.New(context.Background(), dbUrl)
 	if err != nil {
-		log.Fatalf("Erro Crítico ao tentar conectar ao banco de dados: %v", err)
+		logger.Error("Erro ao tentar conectar ao banco de dados", "erro", err.Error())
+		os.Exit(1)
 	}
-	defer pool.Close() // Fecha o pool com segurança ao encerrar o programa
+	defer pool.Close()
 
-	log.Println("📦 Conexão com o PostgreSQL estabelecida com sucesso!")
+	logger.Info("Conexão com o PostgreSQL estabelecida com sucesso")
 
 	// =========================================================================
-	// 3. INJEÇÃO DE DEPENDÊNCIAS
+	// 3. INJEÇÃO DE DEPENDÊNCIAS (SERVICE + DECORATOR + CONTROLLERS)
 	// =========================================================================
 	queries := db.New(pool)
 
-	// Instancia a camada de serviço enviando o banco de dados
-	orderService := service.NewOrderService(queries, pool)
+	// 3.1 Instancia o serviço base
+	baseOrderService := service.NewOrderService(queries, pool)
 
-	// Instancia os controladores HTTP
+	// 3.2 Decora o serviço base com o LoggingOrderService
+	orderService := service.NewLoggingOrderService(baseOrderService, logger)
+
+	// 3.3 Instancia os controladores HTTP passando o serviço decorado
 	clientController := controllers.NewClientController(queries)
 	productController := controllers.NewProductController(queries)
 	orderController := controllers.NewOrderController(orderService)
@@ -66,21 +76,21 @@ func main() {
 	r.Use(middleware.Recoverer) // Evita crash da aplicação em caso de erro grave
 
 	// --- ROTAS DA ENTIDADE: CLIENTES ---
-	r.Post("/clientes", clientController.Create)      // POST /clientes
-	r.Get("/clientes", clientController.List)         // GET /clientes
-	r.Get("/clientes/{id}", clientController.GetByID) // GET /clientes/{id} (EXIGIDO)
+	r.Post("/clientes", clientController.Create)
+	r.Get("/clientes", clientController.List)
+	r.Get("/clientes/{id}", clientController.GetByID)
 
 	// --- ROTAS DA ENTIDADE: PRODUTOS ---
-	r.Post("/produtos", productController.Create)      // POST /produtos
-	r.Get("/produtos", productController.List)         // GET /produtos
-	r.Get("/produtos/{id}", productController.GetByID) // GET /produtos/{id} (EXIGIDO)
+	r.Post("/produtos", productController.Create)
+	r.Get("/produtos", productController.List)
+	r.Get("/produtos/{id}", productController.GetByID)
 
 	// --- ROTAS DA ENTIDADE: PEDIDOS ---
-	r.Post("/pedidos", orderController.Create)               // POST /pedidos
-	r.Get("/pedidos", orderController.ListPaginado)          // GET /pedidos?limit=10&offset=0 (EXIGIDO)
-	r.Get("/pedidos/{id}", orderController.GetByID)          // GET /pedidos/{id} (EXIGIDO)
-	r.Post("/pedidos/{id}/pagar", orderController.Pay)       // POST /pedidos/{id}/pagar (Ajustado verbo POST)
-	r.Post("/pedidos/{id}/cancelar", orderController.Cancel) // POST /pedidos/{id}/cancelar (Ajustado verbo POST)
+	r.Post("/pedidos", orderController.Create)
+	r.Get("/pedidos", orderController.ListPaginado)
+	r.Get("/pedidos/{id}", orderController.GetByID)
+	r.Post("/pedidos/{id}/pagar", orderController.Pay)
+	r.Post("/pedidos/{id}/cancelar", orderController.Cancel)
 
 	// =========================================================================
 	// 5. INICIALIZAÇÃO DO SERVIDOR HTTP
@@ -90,9 +100,10 @@ func main() {
 		porta = "8080"
 	}
 
-	log.Printf("🚀 Servidor HTTP inicializado com sucesso na porta %s\n", porta)
+	logger.Info("Servidor HTTP inicializado com sucesso", "porta", porta)
 
 	if err := http.ListenAndServe(":"+porta, r); err != nil {
-		log.Fatalf("Erro Fatal: Não foi possível iniciar o servidor HTTP: %v", err)
+		logger.Error("Não foi possível iniciar o servidor HTTP", "erro", err.Error())
+		os.Exit(1)
 	}
 }
