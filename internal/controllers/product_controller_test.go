@@ -8,7 +8,9 @@ import (
 	"testing"
 
 	"pedidos/internal/controllers"
+	"pedidos/internal/repository"
 	"pedidos/internal/repository/db"
+	"pedidos/internal/service"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -18,7 +20,7 @@ func TestProductController_Full(t *testing.T) {
 	queries, pool := setupDB(t)
 	defer pool.Close()
 
-	ctrl := controllers.NewProductController(queries)
+	ctrl := controllers.NewProductController(service.NewProductService(repository.NewProductPostgresRepository(queries)))
 	r := chi.NewRouter()
 	r.Post("/produtos", ctrl.Create)
 	r.Get("/produtos", ctrl.List)

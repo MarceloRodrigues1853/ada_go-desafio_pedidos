@@ -5,8 +5,6 @@ import (
 	"log/slog"
 	"time"
 
-	"pedidos/internal/repository/db"
-
 	"github.com/google/uuid"
 )
 
@@ -45,7 +43,8 @@ func (s *LoggingOrderService) Pay(ctx context.Context, pedidoID uuid.UUID) error
 	return nil
 }
 
-func (s *LoggingOrderService) Create(ctx context.Context, clienteID uuid.UUID, itens []db.CreateItemPedidoParams) (*db.Pedido, error) {
+// Create implementa o método Create do OrderServiceInterface
+func (s *LoggingOrderService) Create(ctx context.Context, clienteID uuid.UUID, itens []OrderItemInput) (*OrderOutput, error) {
 	start := time.Now()
 	pedido, err := s.inner.Create(ctx, clienteID, itens)
 	if err != nil {
@@ -63,30 +62,32 @@ func (s *LoggingOrderService) Create(ctx context.Context, clienteID uuid.UUID, i
 	return pedido, nil
 }
 
-func (s *LoggingOrderService) GetByID(ctx context.Context, pedidoID uuid.UUID) (*db.Pedido, error) {
+// GetByID implementa o método GetByID do OrderServiceInterface
+func (s *LoggingOrderService) GetByID(ctx context.Context, pedidoID uuid.UUID) (*OrderOutput, error) {
 	start := time.Now()
 	pedido, err := s.inner.GetByID(ctx, pedidoID)
 	if err != nil {
 		s.logger.Warn("get_by_id failed",
 			"pedido_id", pedidoID,
-			"duratien_ms", time.Since(start).Milliseconds(),
+			"duration_ms", time.Since(start).Milliseconds(),
 			"erro", err.Error())
 		return nil, err
 	}
 	s.logger.Info("get_by_id ok",
 		"pedido_id", pedidoID,
-		"duratien_ms", time.Since(start).Milliseconds())
+		"duration_ms", time.Since(start).Milliseconds())
 	return pedido, nil
 }
 
-func (s *LoggingOrderService) ListPaginado(ctx context.Context, limit, offset int32) ([]db.Pedido, error) {
+// ListPaginado implementa o método ListPaginado do OrderServiceInterface
+func (s *LoggingOrderService) ListPaginado(ctx context.Context, limit, offset int32) ([]OrderOutput, error) {
 	start := time.Now()
 	pedido, err := s.inner.ListPaginado(ctx, limit, offset)
 	if err != nil {
-		s.logger.Warn("list_painando failed",
+		s.logger.Warn("list_painado failed",
 			"limit", limit,
 			"offset", offset,
-			"duratien_ms", time.Since(start).Milliseconds(),
+			"duration_ms", time.Since(start).Milliseconds(),
 			"erro", err.Error())
 		return nil, err
 	}
@@ -94,10 +95,11 @@ func (s *LoggingOrderService) ListPaginado(ctx context.Context, limit, offset in
 		"limit", limit,
 		"offset", offset,
 		"count", len(pedido),
-		"duratien_ms", time.Since(start).Milliseconds())
+		"duration_ms", time.Since(start).Milliseconds())
 	return pedido, nil
 }
 
+// Cancel implementa o método Cancel do OrderServiceInterface
 func (s *LoggingOrderService) Cancel(ctx context.Context, pedidoID uuid.UUID) error {
 	start := time.Now()
 	err := s.inner.Cancel(ctx, pedidoID)

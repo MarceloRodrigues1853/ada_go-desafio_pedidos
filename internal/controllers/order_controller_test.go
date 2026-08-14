@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"pedidos/internal/controllers"
+	"pedidos/internal/repository"
 	"pedidos/internal/repository/db"
 	"pedidos/internal/service"
 
@@ -19,7 +20,7 @@ func TestOrderController_Full(t *testing.T) {
 	queries, pool := setupDB(t)
 	defer pool.Close()
 
-	srv := service.NewOrderService(queries, pool)
+	srv := service.NewOrderService(repository.NewClientPostgresRepository(queries), repository.NewProductPostgresRepository(queries), repository.NewOrderPostgresRepository(queries, pool))
 	ctrl := controllers.NewOrderController(srv)
 
 	r := chi.NewRouter()
@@ -79,8 +80,8 @@ func TestOrderController_Full(t *testing.T) {
 		rr := httptest.NewRecorder()
 		r.ServeHTTP(rr, req)
 
-		if rr.Code != http.StatusConflict { //retorna 409 Conflict se o pedido não existir
-			t.Errorf("esperava 409, obteve %d", rr.Code)
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("esperava 404, obteve %d", rr.Code)
 		}
 	})
 
@@ -108,11 +109,10 @@ func TestOrderController_Full(t *testing.T) {
 			t.Fatalf("falha ao criar produto: %v", err)
 		}
 
-		itens := []db.CreateItemPedidoParams{
+		itens := []service.OrderItemInput{
 			{
-				ProdutoID:     produto.ID,
-				Quantidade:    1,
-				PrecoUnitario: produto.Preco,
+				ProductID: produto.ID,
+				Quantity:  1,
 			},
 		}
 
@@ -156,11 +156,10 @@ func TestOrderController_Full(t *testing.T) {
 			t.Fatalf("falha ao criar produto: %v", err)
 		}
 
-		itens := []db.CreateItemPedidoParams{
+		itens := []service.OrderItemInput{
 			{
-				ProdutoID:     produto.ID,
-				Quantidade:    1,
-				PrecoUnitario: produto.Preco,
+				ProductID: produto.ID,
+				Quantity:  1,
 			},
 		}
 

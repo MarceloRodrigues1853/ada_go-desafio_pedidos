@@ -9,7 +9,8 @@ import (
 	"os"       // Interage com o sistema operacional e lê variáveis do .env
 
 	// Camadas internas da aplicação
-	"pedidos/internal/controllers"   // Handlers Web
+	"pedidos/internal/controllers" // Handlers Web
+	"pedidos/internal/repository"
 	"pedidos/internal/repository/db" // Acesso ao banco via sqlc
 	"pedidos/internal/service"       // Regras de negócio da aplicação
 
@@ -57,14 +58,19 @@ func main() {
 	queries := db.New(pool)
 
 	// 3.1 Instancia o serviço base
-	baseOrderService := service.NewOrderService(queries, pool)
+	clientRepository := repository.NewClientPostgresRepository(queries)
+	productRepository := repository.NewProductPostgresRepository(queries)
+	orderRepository := repository.NewOrderPostgresRepository(queries, pool)
+	clientService := service.NewClientService(clientRepository)
+	productService := service.NewProductService(productRepository)
+	baseOrderService := service.NewOrderService(clientRepository, productRepository, orderRepository)
 
 	// 3.2 Decora o serviço base com o LoggingOrderService
 	orderService := service.NewLoggingOrderService(baseOrderService, logger)
 
 	// 3.3 Instancia os controladores HTTP passando o serviço decorado
-	clientController := controllers.NewClientController(queries)
-	productController := controllers.NewProductController(queries)
+	clientController := controllers.NewClientController(clientService)
+	productController := controllers.NewProductController(productService)
 	orderController := controllers.NewOrderController(orderService)
 
 	// =========================================================================

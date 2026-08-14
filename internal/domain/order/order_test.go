@@ -10,7 +10,7 @@ import (
 // mustItem cria um OrderItem válido para uso nos testes.
 func mustItem(t *testing.T, productID uuid.UUID, quantity int, price float64) OrderItem {
 	t.Helper()
-	item, err := NewOrderItem(productID, quantity, price)
+	item, err := NewOrderItem(productID.String(), quantity, price)
 	if err != nil {
 		t.Fatalf("NewOrderItem() retornou erro inesperado: %v", err)
 	}
@@ -63,6 +63,19 @@ func TestOrder_Pay_ChangesStatusToPaid(t *testing.T) {
 
 	if pedido.Status() != StatusPaid {
 		t.Errorf("status = %q, quero %q", pedido.Status(), StatusPaid)
+	}
+}
+
+func TestOrder_Pay_CanceledOrderReturnsError(t *testing.T) {
+	pedido, err := NewOrder(uuid.New(), []OrderItem{mustItem(t, uuid.New(), 1, 10)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := pedido.Cancel(); err != nil {
+		t.Fatal(err)
+	}
+	if err := pedido.Pay(); !errors.Is(err, ErrCannotPayOrder) {
+		t.Errorf("Pay() erro = %v, quero %v", err, ErrCannotPayOrder)
 	}
 }
 

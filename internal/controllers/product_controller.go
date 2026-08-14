@@ -2,29 +2,34 @@ package controllers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
-	"pedidos/internal/repository/db"
+	"pedidos/internal/repository"
+	"pedidos/internal/service"
 
 	"github.com/go-chi/chi/v5"
 )
 
 // ProductController gerencia o fluxo de dados entre as requisições HTTP e a tabela de produtos no banco
 type ProductController struct {
-	queries *db.Queries // Ponteiro para as funções geradas pelo sqlc
+	service *service.ProductService
 }
 
 // NewProductController constrói o controlador injetando a dependência do banco de dados
-func NewProductController(queries *db.Queries) *ProductController {
-	return &ProductController{
-		queries: queries, // Conecta as rotas do arquivo main às funções SQL
-	}
+func NewProductController(service *service.ProductService) *ProductController {
+	return &ProductController{service: service}
 }
 
 // Create lida com a rota POST /produtos para inserir novos itens no estoque
 func (c *ProductController) Create(w http.ResponseWriter, r *http.Request) {
 	// 1. Instancia a estrutura que o sqlc gerou para os parâmetros de INSERT
-	var input db.CreateProdutoParams
+	var input struct {
+		ID      string  `json:"id"`
+		Nome    string  `json:"nome"`
+		Preco   float64 `json:"preco"`
+		Estoque int     `json:"estoque"`
+	}
 
 	// 2. Transforma o JSON enviado no corpo da requisição do Postman para a nossa estrutura Go
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -34,10 +39,14 @@ func (c *ProductController) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 3. Executa a query de INSERT passando o contexto da requisição e os dados limpos
-	produtoSalvo, err := c.queries.CreateProduto(r.Context(), input)
+	produtoSalvo, err := c.service.Create(r.Context(), input.ID, input.Nome, input.Preco, input.Estoque)
 	if err != nil {
 		// Caso ocorra uma falha de conexão ou restrição no banco, devolve erro 500
-		http.Error(w, "Falha ao gravar o produto no PostgreSQL", http.StatusInternalServerError)
+		if errors.Is(err, repository.ErrConflict) {
+			http.Error(w, "Produto já cadastrado", http.StatusConflict)
+		} else {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
 		return
 	}
 
@@ -54,7 +63,7 @@ func (c *ProductController) Create(w http.ResponseWriter, r *http.Request) {
 // List lida com a rota GET /produtos para exibir a vitrine do sistema
 func (c *ProductController) List(w http.ResponseWriter, r *http.Request) {
 	// 1. Executa a busca mapeada de "SELECT * FROM produtos ORDER BY nome ASC"
-	produtos, err := c.queries.ListProdutos(r.Context())
+	produtos, err := c.service.List(r.Context())
 	if err != nil {
 		// Se a busca falhar, retorna erro interno do servidor
 		http.Error(w, "Erro ao buscar a lista de produtos no banco de dados", http.StatusInternalServerError)
@@ -79,9 +88,13 @@ func (c *ProductController) GetByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2. Executa a busca SQL no banco via sqlc
-	produto, err := c.queries.GetProduto(r.Context(), idParam)
-	if err != nil {
+	produto, err := c.service.GetByID(r.Context(), idParam)
+	if errors.Is(err, repository.ErrNotFound) {
 		http.Error(w, "Produto não encontrado", http.StatusNotFound) // Status 404
+		return
+	}
+	if err != nil {
+		http.Error(w, "Erro ao buscar produto", http.StatusInternalServerError)
 		return
 	}
 

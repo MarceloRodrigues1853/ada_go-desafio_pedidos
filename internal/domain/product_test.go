@@ -98,6 +98,13 @@ func TestProduto_GerenciamentoEstoque(t *testing.T) {
 		}
 	})
 
+	t.Run("ReduzirEstoque com quantidade não positiva deve retornar ErrQuantidadeInvalida", func(t *testing.T) {
+		err := p.ReduzirEstoque(0)
+		if err != domain.ErrQuantidadeInvalida {
+			t.Errorf("esperava ErrQuantidadeInvalida, mas recebeu: %v", err)
+		}
+	})
+
 	// Teste de Devolução de Estoque
 	t.Run("DevolverEstoque deve somar ao saldo atual", func(t *testing.T) {
 		p.DevolverEstoque(5) // Soma 5 ao saldo atual de 7

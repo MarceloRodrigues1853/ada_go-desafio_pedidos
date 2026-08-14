@@ -1,10 +1,6 @@
 package order
 
-import (
-	"errors"
-
-	"github.com/google/uuid"
-)
+import "errors"
 
 // Erros de validação do item do pedido.
 var (
@@ -15,13 +11,17 @@ var (
 // OrderItem é a entidade de linha do agregado Order.
 // Quantidade e preço ficam encapsulados e só nascem válidos via NewOrderItem.
 type OrderItem struct {
-	productID uuid.UUID
+	productID string
 	quantity  int
 	price     float64
 }
 
 // NewOrderItem cria um item validando quantidade > 0 e preço > 0.
-func NewOrderItem(productID uuid.UUID, quantity int, price float64) (OrderItem, error) {
+
+func NewOrderItem(productID string, quantity int, price float64) (OrderItem, error) {
+	if productID == "" {
+		return OrderItem{}, errors.New("product id is required")
+	}
 	if quantity <= 0 {
 		return OrderItem{}, ErrInvalidQuantity
 	}
@@ -37,7 +37,7 @@ func NewOrderItem(productID uuid.UUID, quantity int, price float64) (OrderItem, 
 }
 
 // ProductID retorna o identificador do produto.
-func (i OrderItem) ProductID() uuid.UUID {
+func (i OrderItem) ProductID() string {
 	return i.productID
 }
 

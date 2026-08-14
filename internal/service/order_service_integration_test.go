@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"pedidos/internal/repository"
 	"pedidos/internal/repository/db"
 	"pedidos/internal/service"
 
@@ -27,7 +28,7 @@ func setupTestDB(t *testing.T) (*service.OrderService, *db.Queries, *pgxpool.Poo
 	}
 
 	queries := db.New(pool)
-	srv := service.NewOrderService(queries, pool)
+	srv := service.NewOrderService(repository.NewClientPostgresRepository(queries), repository.NewProductPostgresRepository(queries), repository.NewOrderPostgresRepository(queries, pool))
 
 	return srv, queries, pool
 }
@@ -60,11 +61,10 @@ func TestOrderService_Integration_CreateAndCancel(t *testing.T) {
 	}
 
 	// 2. Testa a CRIAÇÃO DO PEDIDO (Diminui estoque na transação)
-	itens := []db.CreateItemPedidoParams{
+	itens := []service.OrderItemInput{
 		{
-			ProdutoID:     produto.ID,
-			Quantidade:    2,
-			PrecoUnitario: produto.Preco,
+			ProductID: produto.ID,
+			Quantity:  2,
 		},
 	}
 

@@ -2,10 +2,11 @@ package controllers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
-	"pedidos/internal/domain"
-	"pedidos/internal/repository/db"
+	"pedidos/internal/repository"
+	"pedidos/internal/service"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -13,14 +14,12 @@ import (
 
 // ClientController gerencia a comunicação HTTP referente aos clientes
 type ClientController struct {
-	queries *db.Queries // Repositório gerado pelo sqlc para consultas PostgreSQL
+	service *service.ClientService
 }
 
 // NewClientController cria uma nova instância do controller injetando as queries do banco
-func NewClientController(queries *db.Queries) *ClientController {
-	return &ClientController{
-		queries: queries,
-	}
+func NewClientController(service *service.ClientService) *ClientController {
+	return &ClientController{service: service}
 }
 
 // Create lida com a rota POST /clientes para cadastrar novos clientes
@@ -38,23 +37,16 @@ func (c *ClientController) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Chama o Domínio para aplicar regras e criptografar a senha usando bcrypt
-	novoCliente, err := domain.NovoCliente(input.Name, input.Email, input.Password)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest) // Status 400
-		return
-	}
-
-	// 3. Salva no PostgreSQL usando as funções geradas pelo sqlc
-	clienteSalvo, err := c.queries.CreateCliente(r.Context(), db.CreateClienteParams{
-		Name:         novoCliente.Name,
-		Email:        novoCliente.Email,
-		PasswordHash: novoCliente.PasswordHash,
-	})
+	clienteSalvo, err := c.service.Create(r.Context(), input.Name, input.Email, input.Password)
 
 	if err != nil {
-		// Se der erro (ex: e-mail duplicado), devolve o Status 409 Conflict exigido pelo desafio
-		http.Error(w, "Email já cadastrado ou erro no banco", http.StatusConflict)
+		if errors.Is(err, repository.ErrConflict) {
+			http.Error(w, "Email já cadastrado", http.StatusConflict)
+		} else if errors.Is(err, repository.ErrNotFound) {
+			http.Error(w, "Cliente não encontrado", http.StatusNotFound)
+		} else {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
 		return
 	}
 
@@ -66,7 +58,7 @@ func (c *ClientController) Create(w http.ResponseWriter, r *http.Request) {
 
 // List lida com a rota GET /clientes para trazer todos os registros
 func (c *ClientController) List(w http.ResponseWriter, r *http.Request) {
-	clientes, err := c.queries.ListClientes(r.Context())
+	clientes, err := c.service.List(r.Context())
 	if err != nil {
 		http.Error(w, "Erro ao buscar clientes", http.StatusInternalServerError) // Status 500
 		return
@@ -88,9 +80,13 @@ func (c *ClientController) GetByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2. Executa a consulta no PostgreSQL via sqlc
-	cliente, err := c.queries.GetCliente(r.Context(), clienteUUID)
-	if err != nil {
+	cliente, err := c.service.GetByID(r.Context(), clienteUUID)
+	if errors.Is(err, repository.ErrNotFound) {
 		http.Error(w, "Cliente não encontrado", http.StatusNotFound) // Status 404
+		return
+	}
+	if err != nil {
+		http.Error(w, "Erro ao buscar cliente", http.StatusInternalServerError)
 		return
 	}
 

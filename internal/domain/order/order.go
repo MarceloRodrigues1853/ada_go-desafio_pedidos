@@ -18,6 +18,9 @@ const (
 var (
 	// ErrCannotCancelPaidOrder é retornado ao tentar cancelar um pedido já pago.
 	ErrCannotCancelPaidOrder = errors.New("cannot cancel a paid order")
+	ErrCannotPayOrder        = errors.New("cannot pay a non-pending order")
+	ErrCannotCancelOrder     = errors.New("cannot cancel a non-pending order")
+
 	// ErrEmptyOrder é retornado ao tentar criar um pedido sem itens.
 	ErrEmptyOrder = errors.New("order must contain at least one item")
 )
@@ -82,21 +85,27 @@ func (o *Order) CalculateTotal() float64 {
 
 // Pay aprova o pagamento e altera o status para PAID.
 func (o *Order) Pay() error {
+	if o.status != StatusPending {
+		return ErrCannotPayOrder
+	}
 	o.status = StatusPaid
 	return nil
 }
 
 // Cancel cancela o pedido. Pedidos pagos não podem ser cancelados.
 func (o *Order) Cancel() error {
-	if o.status == StatusPaid {
-		return ErrCannotCancelPaidOrder
+	if o.status != StatusPending {
+		if o.status == StatusPaid {
+			return ErrCannotCancelPaidOrder
+		}
+		return ErrCannotCancelOrder
 	}
 
 	o.status = StatusCanceled
 	return nil
 }
 
-// Restore reconstitui um pedido existente vindo do banco de dados
+// Restore reconstitui um pedido existente a partir dos dados persistidos.
 func Restore(id uuid.UUID, clientID uuid.UUID, status Status, items []OrderItem) *Order {
 	return &Order{
 		id:       id,

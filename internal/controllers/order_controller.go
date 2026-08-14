@@ -2,10 +2,13 @@ package controllers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
-	"pedidos/internal/repository/db"
+	"pedidos/internal/domain"
+	"pedidos/internal/domain/order"
+	"pedidos/internal/repository"
 	"pedidos/internal/service"
 
 	"github.com/go-chi/chi/v5"
@@ -52,20 +55,15 @@ func (c *OrderController) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 3. Mapeia a lista recebida no JSON para a struct gerada pelo sqlc
-	var itensParaSalvar []db.CreateItemPedidoParams
+	var itensParaSalvar []service.OrderItemInput
 	for _, item := range input.Itens {
-		itensParaSalvar = append(itensParaSalvar, db.CreateItemPedidoParams{
-			ProdutoID:     item.ProdutoID,
-			Quantidade:    item.Quantidade,
-			PrecoUnitario: item.PrecoUnitario,
-		})
+		itensParaSalvar = append(itensParaSalvar, service.OrderItemInput{ProductID: item.ProdutoID, Quantity: int(item.Quantidade)})
 	}
 
 	// 4. Executa o caso de uso de criação no Service
 	pedidoSalvo, err := c.service.Create(r.Context(), clienteUUID, itensParaSalvar)
 	if err != nil {
-		// Trata erro de estoque ou regra de negócio retornando Status 409 Conflict (conforme regra do professor)
-		http.Error(w, err.Error(), http.StatusConflict)
+		writeOrderError(w, err)
 		return
 	}
 
@@ -88,7 +86,7 @@ func (c *OrderController) GetByID(w http.ResponseWriter, r *http.Request) {
 	// 2. Busca o pedido pelo ID no service
 	pedido, err := c.service.GetByID(r.Context(), pedidoUUID)
 	if err != nil {
-		http.Error(w, "Pedido não encontrado", http.StatusNotFound) // 404 Not Found
+		writeOrderError(w, err)
 		return
 	}
 
@@ -139,8 +137,7 @@ func (c *OrderController) Pay(w http.ResponseWriter, r *http.Request) {
 
 	// 2. Invoca o serviço de pagamento
 	if err := c.service.Pay(r.Context(), pedidoUUID); err != nil {
-		// Retorna 409 Conflict se o pedido já estiver pago/cancelado (conforme exigido pelo professor)
-		http.Error(w, err.Error(), http.StatusConflict)
+		writeOrderError(w, err)
 		return
 	}
 
@@ -162,8 +159,7 @@ func (c *OrderController) Cancel(w http.ResponseWriter, r *http.Request) {
 
 	// 2. Invoca o serviço de cancelamento
 	if err := c.service.Cancel(r.Context(), pedidoUUID); err != nil {
-		// Retorna 409 Conflict se o pedido já foi pago ou cancelado anteriormente
-		http.Error(w, err.Error(), http.StatusConflict)
+		writeOrderError(w, err)
 		return
 	}
 
@@ -171,4 +167,19 @@ func (c *OrderController) Cancel(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"mensagem": "Pedido cancelado com sucesso"}`))
+}
+
+func writeOrderError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, repository.ErrNotFound):
+		http.Error(w, "Pedido não encontrado", http.StatusNotFound)
+	case errors.Is(err, domain.ErrQuantidadeInvalida), errors.Is(err, order.ErrInvalidQuantity), errors.Is(err, order.ErrEmptyOrder):
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	case errors.Is(err, domain.ErrEstoqueInsuficiente), errors.Is(err, order.ErrCannotCancelPaidOrder), errors.Is(err, order.ErrCannotCancelOrder), errors.Is(err, order.ErrCannotPayOrder):
+		http.Error(w, err.Error(), http.StatusConflict)
+	case errors.Is(err, repository.ErrConflict):
+		http.Error(w, "O pedido não está mais pendente", http.StatusConflict)
+	default:
+		http.Error(w, "Erro interno ao processar pedido", http.StatusInternalServerError)
+	}
 }

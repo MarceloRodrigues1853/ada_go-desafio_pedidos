@@ -2,10 +2,10 @@ package domain
 
 // Produto representa a entidade de domínio principal
 type Produto struct {
-	ID      string
-	Nome    string
-	Preco   float64
-	Estoque int
+	ID      string  `json:"id"`
+	Nome    string  `json:"nome"`
+	Preco   float64 `json:"preco"`
+	Estoque int     `json:"estoque"`
 }
 
 // novoProduto cria um novo produto
@@ -29,12 +29,18 @@ func NovoProduto(id, nome string, preco float64, estoque int) (*Produto, error) 
 // DevolverEstoque repõe itens no estoque (ex: quando um pedido é cancelado)
 // usamos `p.Estoque += quantidade` para SOMAR, e não substituir (=)
 func (p *Produto) DevolverEstoque(quantidade int) {
+	if quantidade <= 0 {
+		return
+	}
 	p.Estoque += quantidade
 }
 
 // ReduzirEstoque tira itens do estoque, mas barra a operação se não houver saldo.
 // devolvendo um `error` como resposta.
 func (p *Produto) ReduzirEstoque(quantidade int) error {
+	if quantidade <= 0 {
+		return ErrQuantidadeInvalida
+	}
 	// 1. A regra de negócio: Tentar tirar mais do que tem
 	if p.Estoque < quantidade {
 		// Retornamos errors caso não tenha saldo

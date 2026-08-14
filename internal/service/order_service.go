@@ -2,198 +2,168 @@ package service
 
 import (
 	"context"
-	"errors"
+	"time"
 
+	"pedidos/internal/domain"
 	"pedidos/internal/domain/order"
-	"pedidos/internal/repository/db"
+	"pedidos/internal/repository"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Definimos a interface do que o Controller espera do Service
+type OrderItemInput struct {
+	ProductID string
+	Quantity  int
+}
+type OrderOutput struct {
+	ID        uuid.UUID `json:"id"`
+	ClienteID uuid.UUID `json:"cliente_id"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+}
 type OrderServiceInterface interface {
-	Create(ctx context.Context, clienteID uuid.UUID, itens []db.CreateItemPedidoParams) (*db.Pedido, error)
-	GetByID(ctx context.Context, pedidoID uuid.UUID) (*db.Pedido, error)
-	ListPaginado(ctx context.Context, limit, offset int32) ([]db.Pedido, error)
-	Pay(ctx context.Context, pedidoID uuid.UUID) error
-	Cancel(ctx context.Context, pedidoID uuid.UUID) error
+	Create(context.Context, uuid.UUID, []OrderItemInput) (*OrderOutput, error)
+	GetByID(context.Context, uuid.UUID) (*OrderOutput, error)
+	ListPaginado(context.Context, int32, int32) ([]OrderOutput, error)
+	Pay(context.Context, uuid.UUID) error
+	Cancel(context.Context, uuid.UUID) error
 }
 
-// OrderService coordena os casos de uso de pedidos e depende das queries do sqlc e do pool para transações
 type OrderService struct {
-	queries *db.Queries
-	pool    *pgxpool.Pool
+	clients  repository.ClientRepository
+	products repository.ProductRepository
+	orders   repository.OrderRepository
 }
 
-// NewOrderService injeta a conexão e o pool de conexões do banco de dados na camada de serviço
-func NewOrderService(queries *db.Queries, pool *pgxpool.Pool) *OrderService {
-	return &OrderService{
-		queries: queries,
-		pool:    pool,
-	}
+func NewOrderService(clients repository.ClientRepository, products repository.ProductRepository, orders repository.OrderRepository) *OrderService {
+	return &OrderService{clients, products, orders}
 }
 
-// Create processa a intenção de compra usando TRANSAÇÃO para garantir atomicidade no estoque e itens
-func (s *OrderService) Create(ctx context.Context, clienteID uuid.UUID, itens []db.CreateItemPedidoParams) (*db.Pedido, error) {
-	// 1. Valida se o cliente existe no banco de dados
-	_, err := s.queries.GetCliente(ctx, clienteID)
-	if err != nil {
-		return nil, errors.New("cliente não encontrado")
+func (s *OrderService) Create(ctx context.Context, clientID uuid.UUID, inputs []OrderItemInput) (*OrderOutput, error) {
+	if _, err := s.clients.GetByID(ctx, clientID); err != nil {
+		return nil, err
 	}
-
-	// 2. Valida se o pedido contém ao menos 1 item (Invariante do Domínio)
-	if len(itens) == 0 {
-		return nil, errors.New("o pedido precisa ter pelo menos um item")
-	}
-
-	// 3. Inicia a Transação no PostgreSQL (REQUISITO OBRIGATÓRIO DO PROFESSOR)
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return nil, errors.New("erro ao iniciar transação no banco de dados")
-	}
-	defer tx.Rollback(ctx) // Garante que se houver erro no meio do caminho, nada é salvo no banco
-
-	// Cria o objeto de queries associado à transação atual
-	qtx := s.queries.WithTx(tx)
-
-	// 4. Valida produtos e reduz estoque individualmente dentro da transação
-	for _, item := range itens {
-		// Como no banco o produto_id é VARCHAR(50), passamos a string diretamente
-		produto, err := qtx.GetProduto(ctx, item.ProdutoID)
+	items := make([]order.OrderItem, 0, len(inputs))
+	for _, input := range inputs {
+		product, err := s.products.GetByID(ctx, input.ProductID)
 		if err != nil {
-			return nil, errors.New("produto não encontrado")
+			return nil, err
 		}
-
-		// Comparação ajustada usando o tipo int32 nativo
-		if produto.Estoque < item.Quantidade {
-			return nil, errors.New("estoque insuficiente para o produto")
-		}
-
-		// Reduz o estoque do produto no banco (Estoque mapeia para o parâmetro $2 da query)
-		err = qtx.ReduzirEstoque(ctx, db.ReduzirEstoqueParams{
-			ID:      item.ProdutoID,
-			Estoque: item.Quantidade,
-		})
+		item, err := order.NewOrderItem(product.ID, input.Quantity, product.Preco)
 		if err != nil {
-			return nil, errors.New("erro ao atualizar estoque do produto")
+			return nil, err
 		}
+		items = append(items, item)
 	}
-
-	// 5. Cria a capa do pedido no banco
-	pedido, err := qtx.CreatePedido(ctx, clienteID)
+	aggregate, err := order.NewOrder(clientID, items)
 	if err != nil {
-		return nil, errors.New("erro ao criar a capa do pedido")
+		return nil, err
 	}
-
-	// 6. Insere os itens vinculados ao pedido criado
-	for _, item := range itens {
-		item.PedidoID = pedido.ID
-		_, err := qtx.CreateItemPedido(ctx, item)
+	var record *repository.OrderRecord
+	err = s.orders.WithinTransaction(ctx, func(tx repository.OrderTransaction) error {
+		for _, item := range aggregate.Items() {
+			if err := tx.ReserveStock(ctx, item.ProductID(), item.Quantity()); err != nil {
+				return err
+			}
+		}
+		created, err := tx.Create(ctx, aggregate)
 		if err != nil {
-			return nil, errors.New("erro ao adicionar item ao pedido")
+			return err
 		}
-	}
-
-	// 7. Confirma e efetiva a transação no banco de dados (Commit)
-	if err := tx.Commit(ctx); err != nil {
-		return nil, errors.New("erro ao finalizar transação do pedido")
-	}
-
-	return &pedido, nil
-}
-
-// GetByID busca um pedido único pelo ID (EXIGIDO NO ENUNCIADO DO DESAFIO)
-func (s *OrderService) GetByID(ctx context.Context, pedidoID uuid.UUID) (*db.Pedido, error) {
-	pedido, err := s.queries.GetPedidoByID(ctx, pedidoID)
-	if err != nil {
-		return nil, errors.New("pedido não encontrado")
-	}
-	return &pedido, nil
-}
-
-// ListPaginado retorna a lista de pedidos com limit e offset (EXIGIDO NO ENUNCIADO DO DESAFIO)
-func (s *OrderService) ListPaginado(ctx context.Context, limit, offset int32) ([]db.Pedido, error) {
-	return s.queries.ListPedidosPaginado(ctx, db.ListPedidosPaginadoParams{
-		Limit:  limit,
-		Offset: offset,
+		record = created
+		return nil
 	})
-}
-
-// Pay altera o status do pedido para 'PAID'
-func (s *OrderService) Pay(ctx context.Context, pedidoID uuid.UUID) error {
-	// 1. Busca os dados brutos no banco
-	dbPedido, err := s.queries.GetPedidoByID(ctx, pedidoID)
 	if err != nil {
-		return errors.New("pedido não encontrado")
+		return nil, err
 	}
-
-	// 2. Transforma em entidade pura do domínio para aplicar regras
-	domainOrder := order.Restore(
-		dbPedido.ID,
-		dbPedido.ClienteID,
-		order.Status(dbPedido.Status),
-		[]order.OrderItem{},
-	)
-
-	// 3. Aplica regra de negócio de pagamento (Lança erro se já pago ou cancelado)
-	if err := domainOrder.Pay(); err != nil {
+	return orderOutput(record), nil
+}
+func (s *OrderService) GetByID(ctx context.Context, id uuid.UUID) (*OrderOutput, error) {
+	record, err := s.orders.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return orderOutput(record), nil
+}
+func (s *OrderService) ListPaginado(ctx context.Context, limit, offset int32) ([]OrderOutput, error) {
+	records, err := s.orders.List(ctx, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	output := make([]OrderOutput, 0, len(records))
+	for i := range records {
+		output = append(output, *orderOutput(&records[i]))
+	}
+	return output, nil
+}
+func (s *OrderService) Pay(ctx context.Context, id uuid.UUID) error {
+	record, err := s.orders.GetByID(ctx, id)
+	if err != nil {
 		return err
 	}
-
-	// 4. Atualiza o status no banco de dados
-	return s.queries.UpdatePedidoStatus(ctx, db.UpdatePedidoStatusParams{
-		ID:     pedidoID,
-		Status: string(domainOrder.Status()),
+	if err := record.Order.Pay(); err != nil {
+		return err
+	}
+	return s.orders.UpdateStatus(ctx, id, record.Order.Status())
+}
+func (s *OrderService) Cancel(ctx context.Context, id uuid.UUID) error {
+	record, err := s.orders.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := record.Order.Cancel(); err != nil {
+		return err
+	}
+	return s.orders.WithinTransaction(ctx, func(tx repository.OrderTransaction) error {
+		for _, item := range record.Order.Items() {
+			if err := tx.ReturnStock(ctx, item.ProductID(), item.Quantity()); err != nil {
+				return err
+			}
+		}
+		return tx.UpdateStatus(ctx, id, record.Order.Status())
 	})
 }
+func orderOutput(record *repository.OrderRecord) *OrderOutput {
+	return &OrderOutput{ID: record.Order.ID(), ClienteID: record.Order.ClientID(), Status: string(record.Order.Status()), CreatedAt: record.CreatedAt}
+}
 
-// Cancel altera o status para 'CANCELED' e devolve os itens ao estoque
-func (s *OrderService) Cancel(ctx context.Context, pedidoID uuid.UUID) error {
-	// 1. Verifica se o pedido existe
-	dbPedido, err := s.queries.GetPedidoByID(ctx, pedidoID)
+type ClientService struct{ repository repository.ClientRepository }
+
+func NewClientService(repository repository.ClientRepository) *ClientService {
+	return &ClientService{repository}
+}
+func (s *ClientService) Create(ctx context.Context, name, email, password string) (*domain.Cliente, error) {
+	client, err := domain.NovoCliente(name, email, password)
 	if err != nil {
-		return errors.New("pedido não encontrado")
+		return nil, err
 	}
+	return s.repository.Create(ctx, client)
+}
+func (s *ClientService) List(ctx context.Context) ([]domain.Cliente, error) {
+	return s.repository.List(ctx)
+}
+func (s *ClientService) GetByID(ctx context.Context, id uuid.UUID) (*domain.Cliente, error) {
+	return s.repository.GetByID(ctx, id)
+}
 
-	// Valida se o pedido já está pago ou cancelado
-	if dbPedido.Status == "PAID" {
-		return errors.New("não é possível cancelar um pedido que já foi pago")
-	}
-	if dbPedido.Status == "CANCELED" {
-		return errors.New("este pedido já está cancelado")
-	}
+type ProductService struct{ repository repository.ProductRepository }
 
-	// 2. Abre transação para devolver o estoque e atualizar o status de forma atômica
-	tx, err := s.pool.Begin(ctx)
+func NewProductService(repository repository.ProductRepository) *ProductService {
+	return &ProductService{repository}
+}
+func (s *ProductService) Create(ctx context.Context, id, name string, price float64, stock int) (*domain.Produto, error) {
+	product, err := domain.NovoProduto(id, name, price, stock)
 	if err != nil {
-		return errors.New("erro ao iniciar transação")
+		return nil, err
 	}
-	defer tx.Rollback(ctx)
-
-	qtx := s.queries.WithTx(tx)
-
-	// 3. Busca os itens do pedido para realizar a devolução do estoque
-	itens, err := qtx.GetItensPedido(ctx, pedidoID)
-	if err == nil {
-		for _, item := range itens {
-			// Devolve a quantidade para o estoque usando a struct gerada pelo sqlc (campo Estoque)
-			_ = qtx.DevolverEstoque(ctx, db.DevolverEstoqueParams{
-				ID:      item.ProdutoID,
-				Estoque: item.Quantidade,
-			})
-		}
+	return s.repository.Create(ctx, product)
+}
+func (s *ProductService) List(ctx context.Context) ([]domain.Produto, error) {
+	return s.repository.List(ctx)
+}
+func (s *ProductService) GetByID(ctx context.Context, id string) (*domain.Produto, error) {
+	if id == "" {
+		return nil, domain.ErrProdutoInvalido
 	}
-
-	// 4. Atualiza o status para CANCELED
-	err = qtx.UpdatePedidoStatus(ctx, db.UpdatePedidoStatusParams{
-		ID:     pedidoID,
-		Status: "CANCELED",
-	})
-	if err != nil {
-		return errors.New("erro ao atualizar status do pedido")
-	}
-
-	// 5. Confirma as alterações no banco (Commit)
-	return tx.Commit(ctx)
+	return s.repository.GetByID(ctx, id)
 }
