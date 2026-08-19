@@ -32,6 +32,13 @@ type Pedido struct {
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 }
 
+type ProcessedEvent struct {
+	OrderID     uuid.UUID        `json:"order_id"`
+	SagaID      uuid.UUID        `json:"saga_id"`
+	Status      string           `json:"status"`
+	ProcessedAt pgtype.Timestamp `json:"processed_at"`
+}
+
 type Produto struct {
 	ID      string  `json:"id"`
 	Nome    string  `json:"nome"`

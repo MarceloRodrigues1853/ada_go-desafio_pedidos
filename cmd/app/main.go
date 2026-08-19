@@ -13,6 +13,7 @@ import (
 	"pedidos/internal/controllers" // Handlers Web
 	"pedidos/internal/events"
 	"pedidos/internal/infra/broker"
+	internalLogger "pedidos/internal/infra/logger"
 	"pedidos/internal/repository"
 	"pedidos/internal/repository/db" // Acesso ao banco via sqlc
 	"pedidos/internal/service"       // Regras de negócio da aplicação
@@ -28,9 +29,10 @@ func main() {
 	// =========================================================================
 	// 1. CONFIGURAÇÃO DE LOGS (SLOG JSON) E AMBIENTE (.env)
 	// =========================================================================
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	baseHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
-	}))
+	})
+	logger := slog.New(internalLogger.NewContextHandler(baseHandler))
 	slog.SetDefault(logger)
 
 	if err := godotenv.Load(); err != nil {
@@ -94,10 +96,33 @@ func main() {
 					logger.Error("Erro ao desserializar PaymentProcessedEvent", "erro", err.Error())
 					return err
 				}
-				return orderService.ProcessPaymentResult(ctxBg, paymentEvent)
+				ctxWithSaga := internalLogger.WithSagaID(ctxBg, paymentEvent.SagaID)
+				return orderService.ProcessPaymentResult(ctxWithSaga, paymentEvent)
 			})
 			if err != nil {
 				logger.Error("Erro no consumidor RabbitMQ payment.processed", "erro", err.Error())
+			}
+		}()
+	}
+
+	// 3.5 Inicializa consumidor RabbitMQ para compensação da SAGA (payment.failed)
+	failedConsumer, err := broker.NewRabbitMQConsumer(rabbitURL)
+	if err != nil {
+		logger.Warn("Aviso: Falha ao conectar consumidor RabbitMQ para payment.failed.", "erro", err.Error())
+	} else {
+		go func() {
+			ctxBg := context.Background()
+			err := failedConsumer.Consume(ctxBg, events.TopicPaymentFailed, func(body []byte) error {
+				var failedEvent events.PaymentFailedEvent
+				if err := json.Unmarshal(body, &failedEvent); err != nil {
+					logger.Error("Erro ao desserializar PaymentFailedEvent", "erro", err.Error())
+					return err
+				}
+				ctxWithSaga := internalLogger.WithSagaID(ctxBg, failedEvent.SagaID)
+				return orderService.ProcessPaymentFailure(ctxWithSaga, failedEvent)
+			})
+			if err != nil {
+				logger.Error("Erro no consumidor RabbitMQ payment.failed", "erro", err.Error())
 			}
 		}()
 	}

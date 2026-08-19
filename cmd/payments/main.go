@@ -10,15 +10,39 @@ import (
 
 	"pedidos/internal/events"
 	"pedidos/internal/infra/broker"
+	internalLogger "pedidos/internal/infra/logger"
 	"pedidos/internal/payments"
+	"pedidos/internal/repository"
+	"pedidos/internal/repository/db"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 )
 
 func main() {
 	// 1. Configuração de Logs estruturados (JSON)
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	baseHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
-	}))
+	})
+	logger := slog.New(internalLogger.NewContextHandler(baseHandler))
 	slog.SetDefault(logger)
+
+	_ = godotenv.Load()
+
+	dbUrl := os.Getenv("DB_URL")
+	if dbUrl == "" {
+		dbUrl = "postgres://root:password@localhost:5432/pedidos_db?sslmode=disable"
+	}
+
+	pool, err := pgxpool.New(context.Background(), dbUrl)
+	if err != nil {
+		logger.Error("Erro ao conectar ao banco de dados", "erro", err.Error())
+		os.Exit(1)
+	}
+	defer pool.Close()
+
+	queries := db.New(pool)
+	paymentRepo := repository.NewPaymentPostgresRepository(queries, pool)
 
 	rabbitURL := os.Getenv("RABBITMQ_URL")
 	if rabbitURL == "" {
@@ -27,7 +51,7 @@ func main() {
 
 	logger.Info("Iniciando microsserviço de pagamentos...")
 
-	// 2. Conexão Publisher (para enviar PaymentProcessedEvent)
+	// 2. Conexão Publisher (para enviar PaymentProcessedEvent / PaymentFailedEvent)
 	publisher, err := broker.NewRabbitMQPublisher(rabbitURL)
 	if err != nil {
 		logger.Error("Erro ao conectar publisher ao RabbitMQ", "erro", err.Error())
@@ -44,7 +68,7 @@ func main() {
 	defer consumer.Close()
 
 	paymentService := payments.NewPaymentService(publisher)
-	paymentHandler := payments.NewPaymentHandler(paymentService)
+	paymentHandler := payments.NewPaymentHandler(paymentService, paymentRepo)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

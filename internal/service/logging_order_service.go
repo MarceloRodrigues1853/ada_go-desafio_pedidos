@@ -139,3 +139,24 @@ func (s *LoggingOrderService) ProcessPaymentResult(ctx context.Context, event ev
 		"duration_ms", time.Since(start).Milliseconds())
 	return nil
 }
+
+// ProcessPaymentFailure implementa o método ProcessPaymentFailure do OrderServiceInterface
+func (s *LoggingOrderService) ProcessPaymentFailure(ctx context.Context, event events.PaymentFailedEvent) error {
+	start := time.Now()
+	err := s.inner.ProcessPaymentFailure(ctx, event)
+	if err != nil {
+		s.logger.WarnContext(ctx, "process_payment_failure failed",
+			"saga_id", event.SagaID,
+			"order_id", event.OrderID,
+			"reason", event.Reason,
+			"duration_ms", time.Since(start).Milliseconds(),
+			"erro", err.Error())
+		return err
+	}
+	s.logger.InfoContext(ctx, "process_payment_failure ok",
+		"saga_id", event.SagaID,
+		"order_id", event.OrderID,
+		"reason", event.Reason,
+		"duration_ms", time.Since(start).Milliseconds())
+	return nil
+}

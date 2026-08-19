@@ -30,6 +30,7 @@ type OrderServiceInterface interface {
 	Pay(context.Context, uuid.UUID) error
 	Cancel(context.Context, uuid.UUID) error
 	ProcessPaymentResult(context.Context, events.PaymentProcessedEvent) error
+	ProcessPaymentFailure(context.Context, events.PaymentFailedEvent) error
 }
 
 type OrderService struct {
@@ -197,6 +198,44 @@ func (s *OrderService) ProcessPaymentResult(ctx context.Context, event events.Pa
 			"saga_id", event.SagaID,
 			"order_id", event.OrderID,
 			"status", record.Order.Status(),
+		)
+		return nil
+	})
+}
+func (s *OrderService) ProcessPaymentFailure(ctx context.Context, event events.PaymentFailedEvent) error {
+	record, err := s.orders.GetByID(ctx, event.OrderID)
+	if err != nil {
+		slog.ErrorContext(ctx, "Pedido não encontrado para processar falha de pagamento",
+			"saga_id", event.SagaID,
+			"order_id", event.OrderID,
+			"erro", err.Error(),
+		)
+		return err
+	}
+
+	if err := record.Order.Cancel(); err != nil {
+		slog.WarnContext(ctx, "Tentativa de cancelar pedido em estado inválido na compensação",
+			"saga_id", event.SagaID,
+			"order_id", event.OrderID,
+			"status_atual", record.Order.Status(),
+			"erro", err.Error(),
+		)
+	}
+
+	return s.orders.WithinTransaction(ctx, func(tx repository.OrderTransaction) error {
+		for _, item := range record.Order.Items() {
+			if err := tx.ReturnStock(ctx, item.ProductID(), item.Quantity()); err != nil {
+				return err
+			}
+		}
+		if err := tx.UpdateStatus(ctx, event.OrderID, record.Order.Status()); err != nil {
+			return err
+		}
+		slog.InfoContext(ctx, "Saga compensada: Pagamento falhou, pedido cancelado e estoque estornado",
+			"saga_id", event.SagaID,
+			"order_id", event.OrderID,
+			"status", record.Order.Status(),
+			"reason", event.Reason,
 		)
 		return nil
 	})

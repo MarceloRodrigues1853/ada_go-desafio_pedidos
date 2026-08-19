@@ -43,6 +43,11 @@ type OrderRepository interface {
 	UpdateStatus(context.Context, uuid.UUID, order.Status) error
 	WithinTransaction(context.Context, func(OrderTransaction) error) error
 }
+
+type PaymentRepository interface {
+	IsProcessed(context.Context, uuid.UUID) (bool, error)
+	MarkAsProcessed(context.Context, uuid.UUID, uuid.UUID, string) error
+}
 type OrderTransaction interface {
 	ReserveStock(context.Context, string, int) error
 	ReturnStock(context.Context, string, int) error
@@ -244,4 +249,36 @@ func translateError(err error) error {
 		return ErrConflict
 	}
 	return err
+}
+
+type PaymentPostgresRepository struct {
+	queries *db.Queries
+	pool    *pgxpool.Pool
+}
+
+func NewPaymentPostgresRepository(queries *db.Queries, pool *pgxpool.Pool) *PaymentPostgresRepository {
+	return &PaymentPostgresRepository{queries, pool}
+}
+
+func (r *PaymentPostgresRepository) IsProcessed(ctx context.Context, orderID uuid.UUID) (bool, error) {
+	_, err := r.queries.GetProcessedEvent(ctx, orderID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, translateError(err)
+	}
+	return true, nil
+}
+
+func (r *PaymentPostgresRepository) MarkAsProcessed(ctx context.Context, orderID uuid.UUID, sagaID uuid.UUID, status string) error {
+	err := r.queries.CreateProcessedEvent(ctx, db.CreateProcessedEventParams{
+		OrderID: orderID,
+		SagaID:  sagaID,
+		Status:  status,
+	})
+	if err != nil {
+		return translateError(err)
+	}
+	return nil
 }
