@@ -2,9 +2,13 @@ package broker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 
+	internalLogger "pedidos/internal/infra/logger"
+
+	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -31,16 +35,8 @@ func NewRabbitMQConsumer(url string) (*RabbitMQConsumer, error) {
 
 // Consume consome mensagens da fila especificada (topic) executando o handler fornecido
 func (c *RabbitMQConsumer) Consume(ctx context.Context, topic string, handler func([]byte) error) error {
-	_, err := c.ch.QueueDeclare(
-		topic, // nome da fila
-		true,  // durable
-		false, // auto-delete
-		false, // exclusive
-		false, // no-wait
-		nil,   // arguments
-	)
-	if err != nil {
-		return fmt.Errorf("falha ao declarar fila %s: %w", topic, err)
+	if err := declareQueueWithDLQ(c.ch, topic); err != nil {
+		return err
 	}
 
 	msgs, err := c.ch.Consume(
@@ -65,9 +61,22 @@ func (c *RabbitMQConsumer) Consume(ctx context.Context, topic string, handler fu
 				return fmt.Errorf("canal de mensagens fechado para a fila %s", topic)
 			}
 
+			var payload struct {
+				SagaID uuid.UUID `json:"saga_id"`
+			}
+			_ = json.Unmarshal(msg.Body, &payload)
+			msgCtx := ctx
+			if payload.SagaID != uuid.Nil {
+				msgCtx = internalLogger.WithSagaID(ctx, payload.SagaID)
+			}
+
 			if err := handler(msg.Body); err != nil {
-				slog.Error("Erro ao processar mensagem", "topic", topic, "erro", err.Error())
-				_ = msg.Nack(false, false) // Rejeita sem requeue ou ajuste conforme política
+				slog.ErrorContext(msgCtx, "Mensagem rejeitada e encaminhada para DLQ",
+					"erro", err,
+					"saga_id", payload.SagaID,
+					"routing_key", msg.RoutingKey,
+				)
+				_ = msg.Nack(false, false) // Rejeita sem requeue -> vai para DLQ
 			} else {
 				_ = msg.Ack(false)
 			}
