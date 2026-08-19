@@ -10,6 +10,7 @@ import (
 
 	// Camadas internas da aplicação
 	"pedidos/internal/controllers" // Handlers Web
+	"pedidos/internal/infra/broker"
 	"pedidos/internal/repository"
 	"pedidos/internal/repository/db" // Acesso ao banco via sqlc
 	"pedidos/internal/service"       // Regras de negócio da aplicação
@@ -63,7 +64,17 @@ func main() {
 	orderRepository := repository.NewOrderPostgresRepository(queries, pool)
 	clientService := service.NewClientService(clientRepository)
 	productService := service.NewProductService(productRepository)
-	baseOrderService := service.NewOrderService(clientRepository, productRepository, orderRepository)
+
+	rabbitURL := os.Getenv("RABBITMQ_URL")
+	if rabbitURL == "" {
+		rabbitURL = "amqp://guest:guest@localhost:5672/"
+	}
+	eventPublisher, err := broker.NewRabbitMQPublisher(rabbitURL)
+	if err != nil {
+		logger.Warn("Aviso: Falha ao conectar ao RabbitMQ. Mensageria desativada.", "erro", err.Error())
+	}
+
+	baseOrderService := service.NewOrderService(clientRepository, productRepository, orderRepository, eventPublisher)
 
 	// 3.2 Decora o serviço base com o LoggingOrderService
 	orderService := service.NewLoggingOrderService(baseOrderService, logger)

@@ -6,6 +6,7 @@ import (
 
 	"pedidos/internal/domain"
 	"pedidos/internal/domain/order"
+	"pedidos/internal/events"
 	"pedidos/internal/repository"
 
 	"github.com/google/uuid"
@@ -30,13 +31,14 @@ type OrderServiceInterface interface {
 }
 
 type OrderService struct {
-	clients  repository.ClientRepository
-	products repository.ProductRepository
-	orders   repository.OrderRepository
+	clients        repository.ClientRepository
+	products       repository.ProductRepository
+	orders         repository.OrderRepository
+	eventPublisher events.EventPublisher
 }
 
-func NewOrderService(clients repository.ClientRepository, products repository.ProductRepository, orders repository.OrderRepository) *OrderService {
-	return &OrderService{clients, products, orders}
+func NewOrderService(clients repository.ClientRepository, products repository.ProductRepository, orders repository.OrderRepository, eventPublisher events.EventPublisher) *OrderService {
+	return &OrderService{clients, products, orders, eventPublisher}
 }
 
 func (s *OrderService) Create(ctx context.Context, clientID uuid.UUID, inputs []OrderItemInput) (*OrderOutput, error) {
@@ -76,6 +78,21 @@ func (s *OrderService) Create(ctx context.Context, clientID uuid.UUID, inputs []
 	if err != nil {
 		return nil, err
 	}
+
+	if s.eventPublisher != nil {
+		event := events.OrderCreatedEvent{
+			SagaID:      uuid.New(),
+			OrderID:     record.Order.ID(),
+			ClientID:    record.Order.ClientID(),
+			TotalAmount: record.Order.CalculateTotal(),
+			Status:      string(record.Order.Status()),
+			CreatedAt:   record.CreatedAt,
+		}
+		if err := s.eventPublisher.Publish(ctx, events.TopicOrderCreated, event); err != nil {
+			return nil, err
+		}
+	}
+
 	return orderOutput(record), nil
 }
 func (s *OrderService) GetByID(ctx context.Context, id uuid.UUID) (*OrderOutput, error) {
