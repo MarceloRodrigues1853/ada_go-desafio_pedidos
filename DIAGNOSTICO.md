@@ -1,53 +1,61 @@
 # Relatório de Auditoria de Arquitetura Go
 
+**Data:** 22/05/2024  
+**Auditor:** Tech Lead & Arquiteto Go  
+**Status:** Auditoria de Fases 2-6
+
+---
+
 ## 1. Diagnóstico Geral
-O projeto apresenta uma estrutura sólida de microsserviços com separação clara de responsabilidades (`cmd/app` vs `cmd/payments`). A infraestrutura de mensageria (RabbitMQ) está integrada e o serviço de pagamentos já possui um esqueleto funcional de consumo e publicação.
+
+O projeto apresenta uma estrutura sólida em Go, utilizando `sqlc` para persistência e `chi` para roteamento. A infraestrutura de mensageria (RabbitMQ) está presente e funcional para publicação. No entanto, a implementação da Saga e a separação física dos serviços ainda carecem de maturidade operacional.
 
 ### Checklist de Fases
 
 | Fase | Status | Observações |
 | :--- | :--- | :--- |
-| **FASE 2: Microsserviço Payments** | **IMPLEMENTADO** | Serviço isolado em `cmd/payments`, com lógica de handler e service. |
-| **FASE 3: Mensageria** | **PARCIAL** | Broker configurado, mas a lógica de **idempotência** no consumidor de pagamentos não está explícita. |
-| **FASE 4: Saga** | **NÃO IDENTIFICADO** | Fluxos de compensação (ex: falha no pagamento -> cancelar pedido) não estão implementados. |
-| **FASE 5: Logs Estruturados** | **PARCIAL** | `slog` configurado no `main.go`, mas falta propagação consistente de `correlation_id` ou `saga_id` entre serviços. |
-| **FASE 6: Documentação** | **PARCIAL** | Existem assets de testes, mas falta documentação técnica da Saga. |
+| **FASE 2: Microsserviço Payments** | **PARCIAL** | Existe `cmd/payments`, mas a separação de dependências e o isolamento do schema de banco não estão totalmente segregados. |
+| **FASE 3: Mensageria** | **IMPLEMENTADO** | Publisher funcional em `internal/infra/broker`. Consumo ainda precisa ser validado em produção. |
+| **FASE 4: Saga** | **PARCIAL** | Existe um `saga_test.go`, mas a orquestração real entre `orders` e `payments` não está integrada no fluxo principal. |
+| **FASE 5: Logs Estruturados** | **PARCIAL** | Uso de `slog` iniciado, mas falta padronização de `correlation_id` em todo o fluxo. |
+| **FASE 6: Documentação** | **PARCIAL** | Documentação visual (assets) presente, mas falta documentação técnica de arquitetura (ADR). |
 
 ---
 
 ## 2. O que realmente falta
-1.  **Idempotência:** O `PaymentHandler` precisa verificar se o `order_id` já foi processado para evitar pagamentos duplicados.
-2.  **Orquestração da Saga:** O serviço de pedidos (`app`) precisa escutar eventos de `PaymentProcessed` ou `PaymentFailed` para atualizar o status do pedido.
-3.  **Contexto de Saga:** Implementar um middleware ou decorator que injete um `SagaID` nos headers das mensagens RabbitMQ para rastreabilidade.
-4.  **Compensação:** Implementar o fluxo de cancelamento de pedido caso o pagamento falhe.
+
+1.  **Isolamento de Schema:** O serviço de `payments` deve apontar para um schema ou banco de dados distinto, não apenas compartilhar o mesmo banco de `pedidos`.
+2.  **Orquestrador de Saga:** Falta um componente que gerencie o estado da transação distribuída (ex: `Pending` -> `Paid` ou `Failed` -> `Compensated`).
+3.  **Idempotência:** Não há verificação de `idempotency_key` no consumidor de eventos de pagamento.
+4.  **Correlation ID:** O `slog` não está sendo injetado via Middleware para rastrear requisições entre serviços.
 
 ---
 
-## 3. Próximo Passo de Implementação: Idempotência e Saga-Feedback
+## 3. Próximo Passo de Implementação
 
-O foco imediato é garantir que o microsserviço de pagamentos não processe o mesmo pedido duas vezes e que o serviço de pedidos saiba o resultado do pagamento.
+O foco imediato é a **implementação da Saga de Pagamento com Idempotência**.
 
 ### Tarefas Detalhadas:
 
-1.  **Implementar Idempotência no `internal/payments/handler.go`**:
-    *   Adicionar uma tabela `processed_payments` no banco de dados (ou verificar status no serviço de pedidos via API/DB).
-    *   Modificar `HandleMessage` para verificar existência antes de processar.
+1.  **Middleware de Correlation ID:**
+    *   Criar `internal/infra/middleware/correlation.go`.
+    *   Capturar `X-Correlation-ID` do header e injetar no `context.Context`.
+    *   Configurar `slog` para extrair esse valor do contexto em cada log.
 
-2.  **Implementar Consumidor de Resposta no `cmd/app/main.go`**:
-    *   O serviço de pedidos deve escutar o tópico de eventos de pagamento.
-    *   Criar `internal/infra/broker/consumer_app.go` para processar `PaymentProcessedEvent` e `PaymentFailedEvent`.
+2.  **Refatoração do Handler de Pagamento:**
+    *   No arquivo `internal/payments/handler.go`, implementar a verificação de idempotência antes de processar o pagamento.
+    *   Adicionar campo `status` na tabela de pagamentos para suportar a transição de estados da Saga.
 
-3.  **Atualizar `internal/service/order_service.go`**:
-    *   Adicionar método `UpdateOrderStatus(ctx, orderID, status)`.
+3.  **Teste de Integração da Saga:**
+    *   Criar um teste em `internal/service/saga_integration_test.go` que simule:
+        1. Criação de pedido (Status: PENDING).
+        2. Publicação de evento de pagamento.
+        3. Consumo do evento e atualização do pedido (Status: PAID).
+        4. Simulação de falha e execução da compensação (Status: CANCELLED).
 
 ### Arquivos a criar/modificar:
-*   **Modificar:** `internal/payments/handler.go` (Adicionar lógica de verificação).
-*   **Criar:** `internal/events/payment_events.go` (Definir structs de eventos de resposta).
-*   **Modificar:** `cmd/app/main.go` (Adicionar o consumidor de eventos de pagamento).
+*   `internal/infra/middleware/correlation.go` (Novo)
+*   `internal/payments/handler.go` (Modificar para incluir lógica de idempotência)
+*   `internal/service/saga_integration_test.go` (Novo)
 
-### Teste de Validação:
-*   Criar `internal/payments/handler_idempotency_test.go`: Simular o recebimento da mesma mensagem duas vezes e garantir que o serviço de pagamento só execute a lógica de negócio uma vez.
-
----
-**Auditor:** Tech Lead Go
-**Status:** Auditoria concluída. Aguardando execução do próximo passo.
+**Ação imediata:** Iniciar pelo Middleware de Correlation ID para garantir rastreabilidade antes de avançar na lógica complexa da Saga.
