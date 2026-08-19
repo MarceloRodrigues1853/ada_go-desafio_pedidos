@@ -10,6 +10,7 @@ import (
 
 	"pedidos/internal/events"
 	internalLogger "pedidos/internal/infra/logger"
+	"pedidos/internal/infra/metrics"
 	"pedidos/internal/repository"
 )
 
@@ -87,6 +88,8 @@ func (h *PaymentHandler) HandleMessageWithContext(ctx context.Context, body []by
 	case *events.PaymentFailedEvent:
 		status = "FAILED"
 	}
+
+	metrics.IncPaymentsProcessed(status)
 
 	if h.repo != nil {
 		if err := h.repo.MarkAsProcessed(ctx, event.OrderID, event.SagaID, status); err != nil {

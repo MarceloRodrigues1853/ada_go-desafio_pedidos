@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,12 +12,14 @@ import (
 	"pedidos/internal/events"
 	"pedidos/internal/infra/broker"
 	internalLogger "pedidos/internal/infra/logger"
+	"pedidos/internal/infra/metrics"
 	"pedidos/internal/payments"
 	"pedidos/internal/repository"
 	"pedidos/internal/repository/db"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -28,6 +31,9 @@ func main() {
 	slog.SetDefault(logger)
 
 	_ = godotenv.Load()
+
+	// Registra os coletores de métricas Prometheus
+	metrics.InitMetrics()
 
 	dbUrl := os.Getenv("DB_URL")
 	if dbUrl == "" {
@@ -85,7 +91,21 @@ func main() {
 
 	logger.Info("Microsserviço de pagamentos escutando eventos", "topic", events.TopicOrderCreated)
 
-	// 5. Consome fila em background/loop
+	// 5. Expõe o endpoint /metrics (Prometheus) em porta dedicada
+	metricsPort := os.Getenv("METRICS_PORT")
+	if metricsPort == "" {
+		metricsPort = "9091"
+	}
+	go func() {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.Handler())
+		if err := http.ListenAndServe(":"+metricsPort, mux); err != nil {
+			logger.Error("Erro ao expor métricas Prometheus", "erro", err.Error())
+		}
+	}()
+	logger.Info("Endpoint de métricas Prometheus ativo", "porta", metricsPort)
+
+	// 6. Consome fila em background/loop
 	errChan := make(chan error, 1)
 	go func() {
 		err := consumer.Consume(ctx, events.TopicOrderCreated, paymentHandler.HandleMessage)

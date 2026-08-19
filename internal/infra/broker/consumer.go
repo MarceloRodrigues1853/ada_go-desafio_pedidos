@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	internalLogger "pedidos/internal/infra/logger"
+	"pedidos/internal/infra/metrics"
 
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -71,6 +72,7 @@ func (c *RabbitMQConsumer) Consume(ctx context.Context, topic string, handler fu
 			}
 
 			if err := handler(msg.Body); err != nil {
+				metrics.IncMessagesDLQ()
 				slog.ErrorContext(msgCtx, "Mensagem rejeitada e encaminhada para DLQ",
 					"erro", err,
 					"saga_id", payload.SagaID,

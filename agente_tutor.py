@@ -620,25 +620,20 @@ equipe_tutora = Crew(
 # ============================================================
 
 if __name__ == "__main__":
-
     print("\n" + "=" * 60)
-    print("🚀 AGENTE TUTOR GO — AUDITORIA")
+    print("🚀 INICIANDO AUDITORIA COM AGENTE TUTOR GO")
     print("=" * 60 + "\n")
 
     resultado = equipe_tutora.kickoff()
 
     caminho_relatorio = PROJETO / "DIAGNOSTICO.md"
-
     caminho_relatorio.write_text(
         str(resultado),
-        encoding="utf-8",
+        encoding="utf-8"
     )
 
     print("\n" + "=" * 60)
-    print("📊 DIAGNÓSTICO CONCLUÍDO")
-    print("=" * 60)
+    print(f"📊 Relatório salvo com sucesso em: {caminho_relatorio.name}")
+    print("=" * 60 + "\n")
 
-    print(f"\nRelatório salvo em:")
-    print(caminho_relatorio)
-
-    print("\n" + str(resultado))
+    print(resultado)

@@ -8,6 +8,7 @@ import (
 	"pedidos/internal/domain"
 	"pedidos/internal/domain/order"
 	"pedidos/internal/events"
+	"pedidos/internal/infra/metrics"
 	"pedidos/internal/repository"
 
 	"github.com/google/uuid"
@@ -45,6 +46,11 @@ func NewOrderService(clients repository.ClientRepository, products repository.Pr
 }
 
 func (s *OrderService) Create(ctx context.Context, clientID uuid.UUID, inputs []OrderItemInput) (*OrderOutput, error) {
+	start := time.Now()
+	defer func() {
+		metrics.ObserveOrderProcessing(time.Since(start).Seconds())
+	}()
+
 	if _, err := s.clients.GetByID(ctx, clientID); err != nil {
 		return nil, err
 	}
@@ -96,6 +102,7 @@ func (s *OrderService) Create(ctx context.Context, clientID uuid.UUID, inputs []
 		}
 	}
 
+	metrics.IncOrdersCreated()
 	return orderOutput(record), nil
 }
 func (s *OrderService) GetByID(ctx context.Context, id uuid.UUID) (*OrderOutput, error) {

@@ -1,0 +1,13 @@
+{"time":"2026-08-19T17:11:02.0826389-03:00","level":"INFO","msg":"Conexão com o PostgreSQL estabelecida com sucesso"}
+{"time":"2026-08-19T17:11:02.3190106-03:00","level":"INFO","msg":"Servidor HTTP inicializado com sucesso","porta":"8080"}
+{"time":"2026-08-19T17:11:09.1288231-03:00","level":"INFO","msg":"Evento publicado com sucesso no RabbitMQ","topic":"order.created"}
+{"time":"2026-08-19T17:11:09.1299358-03:00","level":"INFO","msg":"create ok","service":"orders","component":"order_service","pedido_id":"01a01ba6-2787-7176-bd41-dc1dac0c5a7d","cliente_id":"01a01ba2-1339-76be-8a95-a68cb7cdfb04","duration_ms":198}
+2026/08/19 17:11:09 "POST http://localhost:8080/pedidos HTTP/1.1" from [::1]:4118 - 201 160B in 204.9863ms
+{"time":"2026-08-19T17:11:09.2792278-03:00","level":"INFO","msg":"Saga concluída: Pedido pago com sucesso","saga_id":"fabdf8c7-1dc7-43bf-ad6c-af0a4adfb369","order_id":"01a01ba6-2787-7176-bd41-dc1dac0c5a7d","status":"PAID"}
+{"time":"2026-08-19T17:11:09.2802086-03:00","level":"INFO","msg":"process_payment_result ok","service":"orders","component":"order_service","saga_id":"fabdf8c7-1dc7-43bf-ad6c-af0a4adfb369","order_id":"01a01ba6-2787-7176-bd41-dc1dac0c5a7d","status":"PAID","duration_ms":8}
+{"time":"2026-08-19T17:11:12.8177625-03:00","level":"INFO","msg":"get_by_id ok","service":"orders","component":"order_service","pedido_id":"01a01ba6-2787-7176-bd41-dc1dac0c5a7d","duration_ms":10}
+2026/08/19 17:11:12 "GET http://localhost:8080/pedidos/01a01ba6-2787-7176-bd41-dc1dac0c5a7d HTTP/1.1" from [::1]:18103 - 200 157B in 10.0672ms
+2026/08/19 17:11:28 "GET http://localhost:8080/metrics HTTP/1.1" from [::1]:24132 - 200 9174B in 11.1197ms
+{"time":"2026-08-19T17:12:23.5177028-03:00","level":"ERROR","msg":"Erro ao desserializar PaymentProcessedEvent","erro":"invalid UUID length: 13"}
+{"time":"2026-08-19T17:12:23.5177028-03:00","level":"ERROR","msg":"Mensagem rejeitada e encaminhada para DLQ","erro":"invalid UUID length: 13","saga_id":"00000000-0000-0000-0000-000000000000","routing_key":"payment.processed"}
+2026/08/19 17:12:26 "GET http://localhost:8080/metrics HTTP/1.1" from [::1]:11517 - 200 9172B in 556.8µs

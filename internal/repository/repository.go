@@ -207,7 +207,11 @@ func (t *postgresOrderTransaction) Create(ctx context.Context, aggregate *order.
 			return nil, translateError(err)
 		}
 	}
-	return orderRecordFromDB(row, nil)
+	items, err := t.queries.GetItensPedido(ctx, row.ID)
+	if err != nil {
+		return nil, translateError(err)
+	}
+	return orderRecordFromDB(row, items)
 }
 func (t *postgresOrderTransaction) UpdateStatus(ctx context.Context, id uuid.UUID, status order.Status) error {
 	command, err := t.tx.Exec(ctx, "UPDATE pedidos SET status = $2 WHERE id = $1 AND status = 'PENDING'", id, string(status))

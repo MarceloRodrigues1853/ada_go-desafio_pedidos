@@ -5,23 +5,23 @@ Auditor: Tech Lead & Arquiteto Go
 
 ## 1. Estado atual
 
-O projeto está em um estado maduro e estável. A arquitetura de microsserviços, utilizando Clean Architecture e mensageria assíncrona via RabbitMQ, está bem implementada. A resiliência do sistema foi reforçada com a implementação de Dead Letter Queues (DLQ) para tratar falhas de processamento, garantindo que mensagens não sejam perdidas silenciosamente. Todos os testes passam e o código está em conformidade com as boas práticas de Go.
+O projeto encontra-se em um estado avançado de maturidade. A arquitetura de microsserviços, baseada em Clean Architecture e mensageria assíncrona (RabbitMQ), está consolidada. A resiliência foi tratada com a implementação de Dead Letter Queues (DLQ). Recentemente, foi iniciada a implementação de observabilidade com Prometheus, conforme evidenciado pela presença do pacote `internal/infra/metrics`. O sistema passa em todos os testes e verificações estáticas.
 
 ## 2. Evidências encontradas
 
-- `internal/infra/broker/rabbitmq.go`: Implementação da lógica de declaração de filas com `x-dead-letter-exchange` e `x-dead-letter-routing-key`.
-- `internal/infra/broker/consumer.go`: Uso de `msg.Nack(false, false)` para garantir que mensagens com erro sejam movidas para a DLQ.
-- `internal/infra/broker/rabbitmq_dlq_test.go`: Testes de integração que validam a infraestrutura de mensageria.
-- `go test ./...`: Sucesso em todos os pacotes.
+- `internal/infra/metrics/metrics.go`: Implementação das métricas de negócio e infraestrutura.
+- `internal/infra/broker/consumer.go`: Integração parcial com métricas (observado via `git status`).
+- `go test ./...`: Todos os testes passando, incluindo os novos testes de métricas.
+- `go vet ./...`: Código em conformidade.
 
 ## 3. Checklist das fases
 
 | Fase | Status | Evidência |
 |------|--------|-----------|
-| FASE 2: Payments isolado | IMPLEMENTADO | `cmd/payments` e `internal/payments` |
+| FASE 2: Payments isolado | IMPLEMENTADO | `cmd/payments`, `internal/payments` |
 | FASE 3: Mensageria | IMPLEMENTADO | RabbitMQ, `internal/infra/broker` |
-| FASE 4: Saga | IMPLEMENTADO | Fluxos de sucesso/falha e compensação |
-| FASE 5: Logs/Observabilidade | IMPLEMENTADO | `slog` com `saga_id` e contexto |
+| FASE 4: Saga | IMPLEMENTADO | Fluxos de compensação e estado |
+| FASE 5: Logs/Observabilidade | PARCIAL | `slog` implementado; métricas em progresso |
 | FASE 6: Documentação | IMPLEMENTADO | README e assets presentes |
 
 ## 4. Validação
@@ -31,23 +31,22 @@ O projeto está em um estado maduro e estável. A arquitetura de microsserviços
 
 ## 5. Pendências reais
 
-Não foram identificadas pendências críticas ou funcionais. O sistema está operando conforme o design proposto.
+A implementação das métricas (Prometheus) está presente no código, mas ainda não está exposta via HTTP para que o servidor Prometheus possa coletá-las. O servidor de métricas precisa ser inicializado e o endpoint `/metrics` deve ser registrado.
 
 ## 6. Próximo passo recomendado
 
-**Tarefa:** Implementar métricas de observabilidade (Prometheus).
+**Tarefa:** Expor o endpoint de métricas (`/metrics`) no serviço principal (`cmd/app`).
 
-- **Objetivo:** Monitorar a saúde do sistema, latência de processamento e taxa de erros (especialmente na DLQ).
-- **Por que é necessária:** Para transitar de um sistema funcional para um sistema observável em produção, permitindo alertas proativos.
-- **Arquivos envolvidos:** `internal/infra/metrics/metrics.go` (novo pacote), `internal/infra/broker/consumer.go` (instrumentação do consumidor).
-- **Comportamento esperado:** Expor um endpoint `/metrics` que forneça contadores de mensagens processadas com sucesso e mensagens enviadas para a DLQ.
+- **Objetivo:** Permitir que o Prometheus colete as métricas instrumentadas.
+- **Por que é necessária:** Sem a exposição via HTTP, as métricas implementadas no pacote `internal/infra/metrics` não são acessíveis externamente, tornando a observabilidade inútil em ambiente de produção.
+- **Arquivos envolvidos:** `cmd/app/main.go`.
+- **Comportamento esperado:** Ao iniciar o serviço, um servidor HTTP (ou uma rota no servidor existente) deve expor o handler `promhttp.Handler()` na porta padrão (ex: 2112 ou na mesma porta da API).
 
 ## 7. Testes necessários
 
-- Adicionar testes unitários para o novo pacote de métricas.
-- Adicionar um teste de integração que verifique se o contador de mensagens processadas incrementa após um `Ack`.
+- Adicionar um teste de integração simples que verifique se o endpoint `/metrics` retorna status 200 e o conteúdo esperado (formato Prometheus).
 
 ## 8. Critério de conclusão
 
-- Endpoint `/metrics` acessível.
-- Métricas de sucesso e erro (DLQ) sendo exportadas corretamente.
+- O comando `curl http://localhost:<porta>/metrics` retorna as métricas registradas.
+- O Prometheus consegue realizar o *scrape* dos dados sem erros.

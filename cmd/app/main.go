@@ -14,6 +14,7 @@ import (
 	"pedidos/internal/events"
 	"pedidos/internal/infra/broker"
 	internalLogger "pedidos/internal/infra/logger"
+	"pedidos/internal/infra/metrics"
 	"pedidos/internal/repository"
 	"pedidos/internal/repository/db" // Acesso ao banco via sqlc
 	"pedidos/internal/service"       // Regras de negócio da aplicação
@@ -23,6 +24,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware" // Middlewares de log e recuperação de pânicos
 	"github.com/jackc/pgx/v5/pgxpool"     // Gerenciador de pool de conexões do Postgres
 	"github.com/joho/godotenv"            // Carregador do arquivo .env
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -38,6 +40,9 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		logger.Warn("Arquivo .env não encontrado. O sistema tentará usar variáveis nativas.")
 	}
+
+	// Registra os coletores de métricas Prometheus
+	metrics.InitMetrics()
 
 	// =========================================================================
 	// 2. CONEXÃO COM O BANCO DE DADOS (POSTGRESQL VIA PGXPOOL)
@@ -139,6 +144,9 @@ func main() {
 
 	r.Use(middleware.Logger)    // Loga cada requisição HTTP no console
 	r.Use(middleware.Recoverer) // Evita crash da aplicação em caso de erro grave
+
+	// --- ROTA DE MÉTRICAS PROMETHEUS (OBSERVABILIDADE) ---
+	r.Handle("/metrics", promhttp.Handler())
 
 	// --- ROTAS DA ENTIDADE: CLIENTES ---
 	r.Post("/clientes", clientController.Create)
