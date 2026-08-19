@@ -5,14 +5,14 @@ Auditor: Tech Lead & Arquiteto Go
 
 ## 1. Estado atual
 
-O projeto encontra-se em um estado avançado de maturidade. A arquitetura de microsserviços, baseada em Clean Architecture e mensageria assíncrona (RabbitMQ), está consolidada. A resiliência foi tratada com a implementação de Dead Letter Queues (DLQ). Recentemente, foi iniciada a implementação de observabilidade com Prometheus, conforme evidenciado pela presença do pacote `internal/infra/metrics`. O sistema passa em todos os testes e verificações estáticas.
+O projeto está em um estado de maturidade elevado. A arquitetura de microsserviços, Clean Architecture e mensageria assíncrona (RabbitMQ) estão consolidadas. A observabilidade, que era uma pendência, foi totalmente implementada: o endpoint `/metrics` está registrado no roteador `chi` e o servidor Prometheus pode realizar o *scrape* dos dados. Todos os testes passam e o código está em conformidade com `go vet`.
 
 ## 2. Evidências encontradas
 
-- `internal/infra/metrics/metrics.go`: Implementação das métricas de negócio e infraestrutura.
-- `internal/infra/broker/consumer.go`: Integração parcial com métricas (observado via `git status`).
-- `go test ./...`: Todos os testes passando, incluindo os novos testes de métricas.
-- `go vet ./...`: Código em conformidade.
+- `cmd/app/main.go`: O roteador `newRouter` contém a linha `r.Handle("/metrics", promhttp.Handler())`.
+- `internal/infra/metrics/metrics.go`: Métricas instrumentadas e registradas.
+- `go test ./...`: Todos os testes passaram com sucesso.
+- `go vet ./...`: Nenhuma inconsistência encontrada.
 
 ## 3. Checklist das fases
 
@@ -21,7 +21,7 @@ O projeto encontra-se em um estado avançado de maturidade. A arquitetura de mic
 | FASE 2: Payments isolado | IMPLEMENTADO | `cmd/payments`, `internal/payments` |
 | FASE 3: Mensageria | IMPLEMENTADO | RabbitMQ, `internal/infra/broker` |
 | FASE 4: Saga | IMPLEMENTADO | Fluxos de compensação e estado |
-| FASE 5: Logs/Observabilidade | PARCIAL | `slog` implementado; métricas em progresso |
+| FASE 5: Logs/Observabilidade | IMPLEMENTADO | `slog` e Prometheus (`/metrics`) |
 | FASE 6: Documentação | IMPLEMENTADO | README e assets presentes |
 
 ## 4. Validação
@@ -31,22 +31,22 @@ O projeto encontra-se em um estado avançado de maturidade. A arquitetura de mic
 
 ## 5. Pendências reais
 
-A implementação das métricas (Prometheus) está presente no código, mas ainda não está exposta via HTTP para que o servidor Prometheus possa coletá-las. O servidor de métricas precisa ser inicializado e o endpoint `/metrics` deve ser registrado.
+Não foram identificadas pendências funcionais ou arquiteturais críticas que impeçam o funcionamento do sistema conforme os requisitos estabelecidos. O projeto atingiu o estado de "pronto" para as funcionalidades planejadas.
 
 ## 6. Próximo passo recomendado
 
-**Tarefa:** Expor o endpoint de métricas (`/metrics`) no serviço principal (`cmd/app`).
+**Tarefa:** Implementar um teste de integração de ponta a ponta (E2E) utilizando `testcontainers-go` para validar o fluxo completo da SAGA (Pedido -> Pagamento -> Estoque).
 
-- **Objetivo:** Permitir que o Prometheus colete as métricas instrumentadas.
-- **Por que é necessária:** Sem a exposição via HTTP, as métricas implementadas no pacote `internal/infra/metrics` não são acessíveis externamente, tornando a observabilidade inútil em ambiente de produção.
-- **Arquivos envolvidos:** `cmd/app/main.go`.
-- **Comportamento esperado:** Ao iniciar o serviço, um servidor HTTP (ou uma rota no servidor existente) deve expor o handler `promhttp.Handler()` na porta padrão (ex: 2112 ou na mesma porta da API).
+- **Objetivo:** Garantir que a integração entre os serviços (App, Payments, RabbitMQ, PostgreSQL) funcione em um ambiente isolado e real.
+- **Por que é necessária:** Testes unitários e de integração de componentes individuais são importantes, mas não garantem que a orquestração da SAGA via mensageria funcione corretamente em um ambiente de infraestrutura real.
+- **Arquivos envolvidos:** `internal/service/saga_integration_test.go` (novo arquivo).
+- **Comportamento esperado:** O teste deve subir containers temporários, realizar uma requisição de pedido, disparar o fluxo de pagamento e verificar se o estado final do pedido no banco de dados está correto.
 
 ## 7. Testes necessários
 
-- Adicionar um teste de integração simples que verifique se o endpoint `/metrics` retorna status 200 e o conteúdo esperado (formato Prometheus).
+- Criar `internal/service/saga_integration_test.go` utilizando `testcontainers-go` para orquestrar o ciclo de vida de um pedido com pagamento aprovado e falho.
 
 ## 8. Critério de conclusão
 
-- O comando `curl http://localhost:<porta>/metrics` retorna as métricas registradas.
-- O Prometheus consegue realizar o *scrape* dos dados sem erros.
+- O teste de integração E2E passa com sucesso em um ambiente limpo.
+- O teste valida a consistência do banco de dados após a conclusão da SAGA.

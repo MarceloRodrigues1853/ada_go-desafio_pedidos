@@ -8,10 +8,15 @@ venv/
 __pycache__/
 
 # ========================
+# LOGS E ARTEFATOS DE BUILD
+# ========================
+build/*.log
+/bin/
+
+# ========================
 # BINÁRIOS E EXECUTÁVEIS GO
 # ========================
 # Ignora arquivos compilados no Windows, Mac e Linux
-app.exe
 *.exe
 *.exe~
 *.dll
@@ -19,12 +24,11 @@ app.exe
 *.dylib
 *.test
 *.out
-/bin/
+app.exe
 
 # ========================
 # PASTAS DE EDITORES E IDEs
 # ========================
-# Ignora configurações do Cursor / VS Code
 .vscode/
 .idea/
 *.swp
