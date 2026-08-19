@@ -140,6 +140,31 @@ func main() {
 	// =========================================================================
 	// 4. CONFIGURAÇÃO DE ROTAS E MIDDLEWARES (CHI ROUTER)
 	// =========================================================================
+	r := newRouter(clientController, productController, orderController)
+
+	// =========================================================================
+	// 5. INICIALIZAÇÃO DO SERVIDOR HTTP
+	// =========================================================================
+	porta := os.Getenv("PORT")
+	if porta == "" {
+		porta = "8080"
+	}
+
+	logger.Info("Servidor HTTP inicializado com sucesso", "porta", porta)
+
+	if err := http.ListenAndServe(":"+porta, r); err != nil {
+		logger.Error("Não foi possível iniciar o servidor HTTP", "erro", err.Error())
+		os.Exit(1)
+	}
+}
+
+// newRouter monta o roteador Chi com middlewares e todas as rotas da API,
+// incluindo o endpoint /metrics (Prometheus) para observabilidade.
+func newRouter(
+	clientController *controllers.ClientController,
+	productController *controllers.ProductController,
+	orderController *controllers.OrderController,
+) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)    // Loga cada requisição HTTP no console
@@ -165,18 +190,5 @@ func main() {
 	r.Post("/pedidos/{id}/pagar", orderController.Pay)
 	r.Post("/pedidos/{id}/cancelar", orderController.Cancel)
 
-	// =========================================================================
-	// 5. INICIALIZAÇÃO DO SERVIDOR HTTP
-	// =========================================================================
-	porta := os.Getenv("PORT")
-	if porta == "" {
-		porta = "8080"
-	}
-
-	logger.Info("Servidor HTTP inicializado com sucesso", "porta", porta)
-
-	if err := http.ListenAndServe(":"+porta, r); err != nil {
-		logger.Error("Não foi possível iniciar o servidor HTTP", "erro", err.Error())
-		os.Exit(1)
-	}
+	return r
 }
