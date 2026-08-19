@@ -3,12 +3,15 @@
 # ========================
 .env
 .env.*
-.venv
+venv/
+.venv/
+__pycache__/
 
 # ========================
 # BINÁRIOS E EXECUTÁVEIS GO
 # ========================
 # Ignora arquivos compilados no Windows, Mac e Linux
+app.exe
 *.exe
 *.exe~
 *.dll

@@ -28,7 +28,7 @@ func setupTestDB(t *testing.T) (*service.OrderService, *db.Queries, *pgxpool.Poo
 	}
 
 	queries := db.New(pool)
-	srv := service.NewOrderService(repository.NewClientPostgresRepository(queries), repository.NewProductPostgresRepository(queries), repository.NewOrderPostgresRepository(queries, pool))
+	srv := service.NewOrderService(repository.NewClientPostgresRepository(queries), repository.NewProductPostgresRepository(queries), repository.NewOrderPostgresRepository(queries, pool), nil)
 
 	return srv, queries, pool
 }

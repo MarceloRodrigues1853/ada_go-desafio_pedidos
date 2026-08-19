@@ -20,7 +20,7 @@ func TestOrderController_Full(t *testing.T) {
 	queries, pool := setupDB(t)
 	defer pool.Close()
 
-	srv := service.NewOrderService(repository.NewClientPostgresRepository(queries), repository.NewProductPostgresRepository(queries), repository.NewOrderPostgresRepository(queries, pool))
+	srv := service.NewOrderService(repository.NewClientPostgresRepository(queries), repository.NewProductPostgresRepository(queries), repository.NewOrderPostgresRepository(queries, pool), nil)
 	ctrl := controllers.NewOrderController(srv)
 
 	r := chi.NewRouter()

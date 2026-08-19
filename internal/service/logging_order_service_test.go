@@ -25,7 +25,7 @@ func runWithoutPanic(fn func()) {
 func TestLoggingOrderService(t *testing.T) {
 	// As dependências do serviço interno são nil porque o objetivo
 	// deste teste é validar a execução do wrapper de logging.
-	baseService := service.NewOrderService(nil, nil, nil)
+	baseService := service.NewOrderService(nil, nil, nil, nil)
 
 	// Criamos um logger válido para o LoggingOrderService.
 	// Usamos io.Discard para evitar poluir o terminal durante os testes.
