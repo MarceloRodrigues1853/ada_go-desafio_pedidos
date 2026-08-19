@@ -1,5 +1,0 @@
-{"time":"2026-08-19T17:11:02.1649926-03:00","level":"INFO","msg":"Iniciando microsserviço de pagamentos..."}
-{"time":"2026-08-19T17:11:02.3305141-03:00","level":"INFO","msg":"Microsserviço de pagamentos escutando eventos","topic":"order.created"}
-{"time":"2026-08-19T17:11:02.3305141-03:00","level":"INFO","msg":"Endpoint de métricas Prometheus ativo","porta":"9091"}
-{"time":"2026-08-19T17:11:09.2541078-03:00","level":"INFO","msg":"Evento publicado com sucesso no RabbitMQ","topic":"payment.processed"}
-{"time":"2026-08-19T17:11:09.2668219-03:00","level":"INFO","msg":"Pagamento processado com sucesso","saga_id":"fabdf8c7-1dc7-43bf-ad6c-af0a4adfb369","order_id":"01a01ba6-2787-7176-bd41-dc1dac0c5a7d","status":"PAID"}
