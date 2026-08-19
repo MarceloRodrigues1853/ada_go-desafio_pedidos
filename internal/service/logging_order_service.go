@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"time"
 
+	"pedidos/internal/events"
+
 	"github.com/google/uuid"
 )
 
@@ -114,5 +116,26 @@ func (s *LoggingOrderService) Cancel(ctx context.Context, pedidoID uuid.UUID) er
 		"pedido_id", pedidoID,
 		"duration_ms",
 		time.Since(start).Milliseconds())
+	return nil
+}
+
+// ProcessPaymentResult implementa o método ProcessPaymentResult do OrderServiceInterface
+func (s *LoggingOrderService) ProcessPaymentResult(ctx context.Context, event events.PaymentProcessedEvent) error {
+	start := time.Now()
+	err := s.inner.ProcessPaymentResult(ctx, event)
+	if err != nil {
+		s.logger.Warn("process_payment_result failed",
+			"saga_id", event.SagaID,
+			"order_id", event.OrderID,
+			"status", event.Status,
+			"duration_ms", time.Since(start).Milliseconds(),
+			"erro", err.Error())
+		return err
+	}
+	s.logger.Info("process_payment_result ok",
+		"saga_id", event.SagaID,
+		"order_id", event.OrderID,
+		"status", event.Status,
+		"duration_ms", time.Since(start).Milliseconds())
 	return nil
 }

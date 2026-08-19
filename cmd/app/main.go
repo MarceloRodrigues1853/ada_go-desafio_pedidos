@@ -3,6 +3,7 @@ package main
 import (
 	// Pacotes nativos do Go
 	"context" // Gerencia o ciclo de vida e timeouts de conexões
+	"encoding/json"
 	// Exibe logs formatados no terminal
 	"log/slog" // Logs estruturados
 	"net/http" // Servidor e rotas HTTP
@@ -10,6 +11,7 @@ import (
 
 	// Camadas internas da aplicação
 	"pedidos/internal/controllers" // Handlers Web
+	"pedidos/internal/events"
 	"pedidos/internal/infra/broker"
 	"pedidos/internal/repository"
 	"pedidos/internal/repository/db" // Acesso ao banco via sqlc
@@ -78,6 +80,27 @@ func main() {
 
 	// 3.2 Decora o serviço base com o LoggingOrderService
 	orderService := service.NewLoggingOrderService(baseOrderService, logger)
+
+	// 3.4 Inicializa consumidor RabbitMQ para fechar a SAGA (payment.processed)
+	paymentConsumer, err := broker.NewRabbitMQConsumer(rabbitURL)
+	if err != nil {
+		logger.Warn("Aviso: Falha ao conectar consumidor RabbitMQ para payment.processed.", "erro", err.Error())
+	} else {
+		go func() {
+			ctxBg := context.Background()
+			err := paymentConsumer.Consume(ctxBg, events.TopicPaymentProcessed, func(body []byte) error {
+				var paymentEvent events.PaymentProcessedEvent
+				if err := json.Unmarshal(body, &paymentEvent); err != nil {
+					logger.Error("Erro ao desserializar PaymentProcessedEvent", "erro", err.Error())
+					return err
+				}
+				return orderService.ProcessPaymentResult(ctxBg, paymentEvent)
+			})
+			if err != nil {
+				logger.Error("Erro no consumidor RabbitMQ payment.processed", "erro", err.Error())
+			}
+		}()
+	}
 
 	// 3.3 Instancia os controladores HTTP passando o serviço decorado
 	clientController := controllers.NewClientController(clientService)
