@@ -1,0 +1,16 @@
+# Configuração do Prometheus: coleta as métricas da API de pedidos (app)
+# e do microsserviço de pagamentos (payments) a cada 15 segundos.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Métricas da API de pedidos (orders_created_total, order_processing_duration_seconds...)
+  - job_name: 'app'
+    static_configs:
+      - targets: ['app:8080']
+
+  # Métricas do microsserviço de pagamentos (payments_processed_total, messages_dlq_total...)
+  - job_name: 'payments'
+    static_configs:
+      - targets: ['payments:9091']

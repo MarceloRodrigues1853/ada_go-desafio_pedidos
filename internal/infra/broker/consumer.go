@@ -13,9 +13,12 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+// RabbitMQConsumer consome mensagens de uma fila e executa o handler associado.
+// Usa acknowledgment manual: se o handler falhar, a mensagem é rejeitada (Nack)
+// e encaminhada para a Dead Letter Queue (DLQ).
 type RabbitMQConsumer struct {
-	conn *amqp.Connection
-	ch   *amqp.Channel
+	conn *amqp.Connection // Conexão TCP com o broker
+	ch   *amqp.Channel    // Canal lógico sobre a conexão
 }
 
 // NewRabbitMQConsumer conecta ao broker e prepara o canal para consumo
@@ -86,6 +89,7 @@ func (c *RabbitMQConsumer) Consume(ctx context.Context, topic string, handler fu
 	}
 }
 
+// Close fecha o canal e a conexão com o RabbitMQ de forma segura.
 func (c *RabbitMQConsumer) Close() error {
 	if c.ch != nil {
 		_ = c.ch.Close()

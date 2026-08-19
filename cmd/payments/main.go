@@ -1,3 +1,7 @@
+// Microsserviço de pagamentos (Fase 2).
+// Consome eventos order.created do RabbitMQ, processa o pagamento e publica
+// o resultado (payment.processed / payment.failed) para a SAGA. Também expõe
+// métricas Prometheus em porta dedicada e encerra graciosamente em SIGINT/SIGTERM.
 package main
 
 import (

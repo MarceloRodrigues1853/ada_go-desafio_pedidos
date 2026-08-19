@@ -9,15 +9,20 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+// Nomes das filas e exchange da Dead Letter Queue (DLQ).
+// Quando uma mensagem não pode ser processada, ela é redirecionada
+// para a DLQ correspondente em vez de ser perdida.
 const (
-	DLXExchange = "dlx_exchange"
-	PaymentsDLQ = "payments_dlq"
-	OrdersDLQ   = "orders_dlq"
+	DLXExchange = "dlx_exchange" // Exchange de dead letter (encaminhamento de mensagens rejeitadas)
+	PaymentsDLQ = "payments_dlq" // DLQ das mensagens destinadas ao serviço de pagamentos
+	OrdersDLQ   = "orders_dlq"   // DLQ das mensagens destinadas ao serviço de pedidos
 )
 
+// RabbitMQPublisher é responsável por publicar eventos no RabbitMQ.
+// Mantém a conexão e o canal AMQP abertos durante toda a vida da aplicação.
 type RabbitMQPublisher struct {
-	conn *amqp.Connection
-	ch   *amqp.Channel
+	conn *amqp.Connection // Conexão TCP com o broker
+	ch   *amqp.Channel    // Canal lógico sobre a conexão (multiplexação)
 }
 
 // NewRabbitMQPublisher conecta ao broker e prepara o canal
@@ -36,6 +41,9 @@ func NewRabbitMQPublisher(url string) (*RabbitMQPublisher, error) {
 	return &RabbitMQPublisher{conn: conn, ch: ch}, nil
 }
 
+// declareQueueWithDLQ declara a fila principal com suporte a Dead Letter Queue:
+// cria a DLX (dead letter exchange), a DLQ correspondente e o binding entre elas.
+// Se a mensagem for rejeitada (Nack sem requeue), o RabbitMQ a move para a DLQ.
 func declareQueueWithDLQ(ch *amqp.Channel, queueName string) error {
 	// 1. Declarar a Dead Letter Exchange (DLX)
 	err := ch.ExchangeDeclare(
@@ -135,6 +143,7 @@ func (r *RabbitMQPublisher) Publish(ctx context.Context, topic string, event any
 	return nil
 }
 
+// Close fecha o canal e a conexão com o RabbitMQ de forma segura.
 func (r *RabbitMQPublisher) Close() error {
 	if r.ch != nil {
 		_ = r.ch.Close()

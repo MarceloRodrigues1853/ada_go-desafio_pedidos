@@ -1,0 +1,7 @@
+.git
+.env
+.env.*
+build/
+*.log
+README.md
+DIAGNOSTICO.md

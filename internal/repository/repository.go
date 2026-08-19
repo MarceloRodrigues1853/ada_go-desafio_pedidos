@@ -17,26 +17,31 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("repository: not found")
-	ErrConflict = errors.New("repository: conflict")
+	ErrNotFound = errors.New("repository: not found") // Registro não existe (traduzido de pgx.ErrNoRows)
+	ErrConflict = errors.New("repository: conflict")  // Violação de unicidade ou atualização concorrente
 )
 
+// ClientRepository define a porta de persistência da entidade Cliente.
 type ClientRepository interface {
 	Create(context.Context, *domain.Cliente) (*domain.Cliente, error)
 	List(context.Context) ([]domain.Cliente, error)
 	GetByID(context.Context, uuid.UUID) (*domain.Cliente, error)
 }
 
+// ProductRepository define a porta de persistência da entidade Produto.
 type ProductRepository interface {
 	Create(context.Context, *domain.Produto) (*domain.Produto, error)
 	List(context.Context) ([]domain.Produto, error)
 	GetByID(context.Context, string) (*domain.Produto, error)
 }
 
+// OrderRecord representa um pedido persistido junto com sua data de criação.
 type OrderRecord struct {
 	Order     *order.Order
 	CreatedAt time.Time
 }
+
+// OrderRepository define a porta de persistência do agregado Order.
 type OrderRepository interface {
 	GetByID(context.Context, uuid.UUID) (*OrderRecord, error)
 	List(context.Context, int32, int32) ([]OrderRecord, error)
@@ -44,10 +49,13 @@ type OrderRepository interface {
 	WithinTransaction(context.Context, func(OrderTransaction) error) error
 }
 
+// PaymentRepository define a porta de persistência da idempotência de pagamentos.
 type PaymentRepository interface {
 	IsProcessed(context.Context, uuid.UUID) (bool, error)
 	MarkAsProcessed(context.Context, uuid.UUID, uuid.UUID, string) error
 }
+
+// OrderTransaction expõe as operações atômicas executadas dentro de uma transação.
 type OrderTransaction interface {
 	ReserveStock(context.Context, string, int) error
 	ReturnStock(context.Context, string, int) error
@@ -55,8 +63,10 @@ type OrderTransaction interface {
 	UpdateStatus(context.Context, uuid.UUID, order.Status) error
 }
 
+// ClientPostgresRepository é o adaptador PostgreSQL da porta ClientRepository (via sqlc).
 type ClientPostgresRepository struct{ queries *db.Queries }
 
+// NewClientPostgresRepository cria o repositório de clientes com as queries geradas pelo sqlc.
 func NewClientPostgresRepository(queries *db.Queries) *ClientPostgresRepository {
 	return &ClientPostgresRepository{queries}
 }
@@ -86,8 +96,10 @@ func (r *ClientPostgresRepository) GetByID(ctx context.Context, id uuid.UUID) (*
 	return clientFromDB(row), nil
 }
 
+// ProductPostgresRepository é o adaptador PostgreSQL da porta ProductRepository (via sqlc).
 type ProductPostgresRepository struct{ queries *db.Queries }
 
+// NewProductPostgresRepository cria o repositório de produtos com as queries geradas pelo sqlc.
 func NewProductPostgresRepository(queries *db.Queries) *ProductPostgresRepository {
 	return &ProductPostgresRepository{queries}
 }
@@ -117,11 +129,14 @@ func (r *ProductPostgresRepository) GetByID(ctx context.Context, id string) (*do
 	return productFromDB(row), nil
 }
 
+// OrderPostgresRepository é o adaptador PostgreSQL do agregado Order.
+// Usa o pool diretamente para transações e o sqlc para as queries simples.
 type OrderPostgresRepository struct {
 	queries *db.Queries
 	pool    *pgxpool.Pool
 }
 
+// NewOrderPostgresRepository cria o repositório de pedidos.
 func NewOrderPostgresRepository(queries *db.Queries, pool *pgxpool.Pool) *OrderPostgresRepository {
 	return &OrderPostgresRepository{queries, pool}
 }
@@ -173,9 +188,10 @@ func (r *OrderPostgresRepository) WithinTransaction(ctx context.Context, fn func
 	return tx.Commit(ctx)
 }
 
+// postgresOrderTransaction implementa OrderTransaction sobre uma transação pgx real.
 type postgresOrderTransaction struct {
 	tx      pgx.Tx
-	queries *db.Queries
+	queries *db.Queries // Queries apontando para a transação (via WithTx)
 }
 
 func (t *postgresOrderTransaction) ReserveStock(ctx context.Context, id string, quantity int) error {
@@ -224,12 +240,17 @@ func (t *postgresOrderTransaction) UpdateStatus(ctx context.Context, id uuid.UUI
 	return nil
 }
 
+// clientFromDB converte a linha do banco (sqlc) na entidade de domínio Cliente.
 func clientFromDB(row db.Cliente) *domain.Cliente {
 	return &domain.Cliente{ID: row.ID, Name: row.Name, Email: row.Email, PasswordHash: row.PasswordHash, CreatedAt: row.CreatedAt.Time}
 }
+
+// productFromDB converte a linha do banco (sqlc) na entidade de domínio Produto.
 func productFromDB(row db.Produto) *domain.Produto {
 	return &domain.Produto{ID: row.ID, Nome: row.Nome, Preco: row.Preco, Estoque: int(row.Estoque)}
 }
+
+// orderRecordFromDB reconstrói o agregado Order a partir das linhas persistidas.
 func orderRecordFromDB(row db.Pedido, persisted []db.ItensPedido) (*OrderRecord, error) {
 	items := make([]order.OrderItem, 0, len(persisted))
 	for _, item := range persisted {
@@ -241,6 +262,8 @@ func orderRecordFromDB(row db.Pedido, persisted []db.ItensPedido) (*OrderRecord,
 	}
 	return &OrderRecord{Order: order.Restore(row.ID, row.ClienteID, order.Status(row.Status), items), CreatedAt: row.CreatedAt.Time}, nil
 }
+
+// translateError converte erros do pgx/pgconn nos erros de domínio do repositório.
 func translateError(err error) error {
 	if err == nil {
 		return nil
@@ -255,15 +278,18 @@ func translateError(err error) error {
 	return err
 }
 
+// PaymentPostgresRepository é o adaptador PostgreSQL da idempotência de pagamentos.
 type PaymentPostgresRepository struct {
 	queries *db.Queries
 	pool    *pgxpool.Pool
 }
 
+// NewPaymentPostgresRepository cria o repositório de idempotência de pagamentos.
 func NewPaymentPostgresRepository(queries *db.Queries, pool *pgxpool.Pool) *PaymentPostgresRepository {
 	return &PaymentPostgresRepository{queries, pool}
 }
 
+// IsProcessed verifica se o pedido já teve o pagamento processado anteriormente.
 func (r *PaymentPostgresRepository) IsProcessed(ctx context.Context, orderID uuid.UUID) (bool, error) {
 	_, err := r.queries.GetProcessedEvent(ctx, orderID)
 	if err != nil {
@@ -275,6 +301,7 @@ func (r *PaymentPostgresRepository) IsProcessed(ctx context.Context, orderID uui
 	return true, nil
 }
 
+// MarkAsProcessed registra o pedido como processado (tabela de idempotência).
 func (r *PaymentPostgresRepository) MarkAsProcessed(ctx context.Context, orderID uuid.UUID, sagaID uuid.UUID, status string) error {
 	err := r.queries.CreateProcessedEvent(ctx, db.CreateProcessedEventParams{
 		OrderID: orderID,

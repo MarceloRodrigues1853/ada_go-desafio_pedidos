@@ -53,18 +53,22 @@ func InitMetrics() {
 	}
 }
 
+// IncOrdersCreated incrementa o contador de pedidos criados.
 func IncOrdersCreated() {
 	OrdersCreatedTotal.Inc()
 }
 
+// IncPaymentsProcessed incrementa o contador de pagamentos processados por status (PAID | FAILED).
 func IncPaymentsProcessed(status string) {
 	PaymentsProcessedTotal.WithLabelValues(status).Inc()
 }
 
+// IncMessagesDLQ incrementa o contador de mensagens rejeitadas encaminhadas para a DLQ.
 func IncMessagesDLQ() {
 	MessagesDLQTotal.Inc()
 }
 
+// ObserveOrderProcessing registra a latência de processamento de um pedido (em segundos).
 func ObserveOrderProcessing(durationSeconds float64) {
 	OrderProcessingDurationSeconds.Observe(durationSeconds)
 }

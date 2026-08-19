@@ -1,6 +1,12 @@
+# =============================================================================
+# Ambiente local do desafio: PostgreSQL, RabbitMQ, API de pedidos,
+# microsserviço de pagamentos e Prometheus (observabilidade).
+# Uso: docker-compose up -d
+# =============================================================================
 version: '3.8'
 
 services:
+  # Banco de dados relacional (dados de clientes, produtos e pedidos)
   postgres:
     image: postgres:latest
     container_name: pedidos_db
@@ -13,16 +19,75 @@ services:
       - "5432:5432"
     volumes:
       - pgdata_pedidos:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d pedidos_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
+  # Message broker usado na SAGA (filas order.created, payment.processed, payment.failed)
   rabbitmq:
     image: rabbitmq:3-management
     container_name: pedidos_rabbitmq
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "5672:5672"   # Porta AMQP (comunicação entre serviços)
+      - "15672:15672" # Painel de gerenciamento (http://localhost:15672)
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # API monolítica de pedidos (Fase 1) — expõe HTTP na porta 8080 e /metrics
+  app:
+    build:
+      context: .
+      target: app
+    container_name: pedidos_app
+    environment:
+      DB_URL: postgres://root:password@postgres:5432/pedidos_db?sslmode=disable
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Microsserviço de pagamentos (Fase 2) — consumer da SAGA, métricas na 9091
+  payments:
+    build:
+      context: .
+      target: payments
+    container_name: pedidos_payments
+    environment:
+      DB_URL: postgres://root:password@postgres:5432/pedidos_db?sslmode=disable
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      METRICS_PORT: "9091"
+    ports:
+      - "9091:9091"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Observabilidade: coleta as métricas da API e do payments (http://localhost:9090)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: pedidos_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    restart: unless-stopped
 
 volumes:
   pgdata_pedidos:

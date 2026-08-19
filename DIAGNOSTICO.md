@@ -5,14 +5,15 @@ Auditor: Tech Lead & Arquiteto Go
 
 ## 1. Estado atual
 
-O projeto está em um estado de maturidade elevado. A arquitetura de microsserviços, Clean Architecture e mensageria assíncrona (RabbitMQ) estão consolidadas. A observabilidade, que era uma pendência, foi totalmente implementada: o endpoint `/metrics` está registrado no roteador `chi` e o servidor Prometheus pode realizar o *scrape* dos dados. Todos os testes passam e o código está em conformidade com `go vet`.
+O projeto apresenta uma arquitetura sólida baseada em Clean Architecture e microsserviços, com comunicação assíncrona via RabbitMQ. A implementação da SAGA está funcional e validada por testes unitários e de integração. O sistema possui observabilidade básica (Prometheus e logs) e está em conformidade com as boas práticas de Go (`go vet` e `go test` passando).
 
 ## 2. Evidências encontradas
 
-- `cmd/app/main.go`: O roteador `newRouter` contém a linha `r.Handle("/metrics", promhttp.Handler())`.
-- `internal/infra/metrics/metrics.go`: Métricas instrumentadas e registradas.
-- `go test ./...`: Todos os testes passaram com sucesso.
-- `go vet ./...`: Nenhuma inconsistência encontrada.
+- `internal/service/saga_test.go`: Valida a orquestração da SAGA.
+- `internal/infra/broker/rabbitmq.go`: Implementação de mensageria.
+- `internal/payments/service.go`: Lógica de pagamentos isolada.
+- `go test ./...`: Todos os testes passaram (Exit Code 0).
+- `go vet ./...`: Nenhuma inconsistência encontrada (Exit Code 0).
 
 ## 3. Checklist das fases
 
@@ -20,9 +21,9 @@ O projeto está em um estado de maturidade elevado. A arquitetura de microsservi
 |------|--------|-----------|
 | FASE 2: Payments isolado | IMPLEMENTADO | `cmd/payments`, `internal/payments` |
 | FASE 3: Mensageria | IMPLEMENTADO | RabbitMQ, `internal/infra/broker` |
-| FASE 4: Saga | IMPLEMENTADO | Fluxos de compensação e estado |
-| FASE 5: Logs/Observabilidade | IMPLEMENTADO | `slog` e Prometheus (`/metrics`) |
-| FASE 6: Documentação | IMPLEMENTADO | README e assets presentes |
+| FASE 4: Saga | IMPLEMENTADO | `internal/service/saga_test.go` |
+| FASE 5: Logs/Observabilidade | IMPLEMENTADO | `slog` e Prometheus |
+| FASE 6: Documentação | IMPLEMENTADO | README e assets |
 
 ## 4. Validação
 
@@ -31,20 +32,20 @@ O projeto está em um estado de maturidade elevado. A arquitetura de microsservi
 
 ## 5. Pendências reais
 
-Não foram identificadas pendências funcionais ou arquiteturais críticas que impeçam o funcionamento do sistema conforme os requisitos estabelecidos. O projeto atingiu o estado de "pronto" para as funcionalidades planejadas.
+Embora o sistema esteja funcional, falta uma camada de validação de infraestrutura em tempo de execução que garanta que a integração entre os serviços (via RabbitMQ e Banco de Dados) se comporte corretamente em um ambiente de containers, simulando o ambiente de produção.
 
 ## 6. Próximo passo recomendado
 
-**Tarefa:** Implementar um teste de integração de ponta a ponta (E2E) utilizando `testcontainers-go` para validar o fluxo completo da SAGA (Pedido -> Pagamento -> Estoque).
+**Tarefa:** Implementar um teste de integração de ponta a ponta (E2E) utilizando `testcontainers-go`.
 
-- **Objetivo:** Garantir que a integração entre os serviços (App, Payments, RabbitMQ, PostgreSQL) funcione em um ambiente isolado e real.
-- **Por que é necessária:** Testes unitários e de integração de componentes individuais são importantes, mas não garantem que a orquestração da SAGA via mensageria funcione corretamente em um ambiente de infraestrutura real.
-- **Arquivos envolvidos:** `internal/service/saga_integration_test.go` (novo arquivo).
-- **Comportamento esperado:** O teste deve subir containers temporários, realizar uma requisição de pedido, disparar o fluxo de pagamento e verificar se o estado final do pedido no banco de dados está correto.
+- **Objetivo:** Validar o fluxo completo da SAGA (Pedido -> Pagamento -> Estoque) em um ambiente de infraestrutura real (containers).
+- **Por que é necessária:** Testes unitários e de integração de componentes não garantem que a configuração de rede, variáveis de ambiente e conectividade entre os serviços (App, Payments, RabbitMQ, Postgres) estejam corretas.
+- **Arquivos envolvidos:** `internal/service/saga_e2e_test.go` (novo arquivo).
+- **Comportamento esperado:** O teste deve subir containers (PostgreSQL, RabbitMQ), realizar uma requisição de pedido, processar o pagamento e verificar a consistência final do estado do pedido no banco de dados.
 
 ## 7. Testes necessários
 
-- Criar `internal/service/saga_integration_test.go` utilizando `testcontainers-go` para orquestrar o ciclo de vida de um pedido com pagamento aprovado e falho.
+- Criar `internal/service/saga_e2e_test.go` utilizando `testcontainers-go` para orquestrar o ciclo de vida de um pedido.
 
 ## 8. Critério de conclusão
 

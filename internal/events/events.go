@@ -7,10 +7,11 @@ import (
 	"github.com/google/uuid"
 )
 
+// Tópicos (filas) do RabbitMQ usados na orquestração da SAGA de pagamentos.
 const (
-	TopicOrderCreated     = "order.created"
-	TopicPaymentProcessed = "payment.processed"
-	TopicPaymentFailed    = "payment.failed"
+	TopicOrderCreated     = "order.created"     // Pedido criado -> aguardando pagamento
+	TopicPaymentProcessed = "payment.processed" // Pagamento aprovado -> concluir SAGA
+	TopicPaymentFailed    = "payment.failed"    // Pagamento recusado -> compensação da SAGA
 )
 
 // OrderCreatedEvent é emitido quando um pedido é criado com sucesso e aguarda processamento de pagamento.
