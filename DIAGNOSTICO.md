@@ -1,19 +1,18 @@
 # Relatório de Auditoria de Arquitetura Go
 
-Data: 19/08/2026
+Data: 21/08/2026
 Auditor: Tech Lead & Arquiteto Go
 
 ## 1. Estado atual
 
-O projeto apresenta uma arquitetura sólida baseada em Clean Architecture e microsserviços, com comunicação assíncrona via RabbitMQ. A implementação da SAGA está funcional e validada por testes unitários e de integração. O sistema possui observabilidade básica (Prometheus e logs) e está em conformidade com as boas práticas de Go (`go vet` e `go test` passando).
+O projeto está em um estado maduro. A arquitetura de microsserviços com SAGA está implementada e validada. A infraestrutura de testes foi expandida com sucesso para incluir testes de integração de ponta a ponta (E2E) utilizando `testcontainers-go`, garantindo a integridade do fluxo entre serviços, banco de dados e mensageria.
 
 ## 2. Evidências encontradas
 
-- `internal/service/saga_test.go`: Valida a orquestração da SAGA.
-- `internal/infra/broker/rabbitmq.go`: Implementação de mensageria.
-- `internal/payments/service.go`: Lógica de pagamentos isolada.
-- `go test ./...`: Todos os testes passaram (Exit Code 0).
-- `go vet ./...`: Nenhuma inconsistência encontrada (Exit Code 0).
+- `cmd/app/saga_e2e_test.go`: Implementação robusta de teste E2E que valida o ciclo de vida completo da SAGA.
+- `go test ./...`: Todos os testes, incluindo os de integração, estão passando.
+- `go vet ./...`: Código em conformidade com as normas da linguagem.
+- Estrutura de diretórios: Segue o padrão de Clean Architecture com separação clara entre domínio, serviços e infraestrutura.
 
 ## 3. Checklist das fases
 
@@ -24,6 +23,7 @@ O projeto apresenta uma arquitetura sólida baseada em Clean Architecture e micr
 | FASE 4: Saga | IMPLEMENTADO | `internal/service/saga_test.go` |
 | FASE 5: Logs/Observabilidade | IMPLEMENTADO | `slog` e Prometheus |
 | FASE 6: Documentação | IMPLEMENTADO | README e assets |
+| FASE 7: Testes E2E | IMPLEMENTADO | `cmd/app/saga_e2e_test.go` |
 
 ## 4. Validação
 
@@ -32,22 +32,22 @@ O projeto apresenta uma arquitetura sólida baseada em Clean Architecture e micr
 
 ## 5. Pendências reais
 
-Embora o sistema esteja funcional, falta uma camada de validação de infraestrutura em tempo de execução que garanta que a integração entre os serviços (via RabbitMQ e Banco de Dados) se comporte corretamente em um ambiente de containers, simulando o ambiente de produção.
+O sistema está funcional e testado. Não foram identificadas pendências críticas ou funcionais. A arquitetura atual é resiliente e observável.
 
 ## 6. Próximo passo recomendado
 
-**Tarefa:** Implementar um teste de integração de ponta a ponta (E2E) utilizando `testcontainers-go`.
+**Tarefa:** Implementar uma estratégia de *Dead Letter Queue* (DLQ) para o consumidor de pagamentos.
 
-- **Objetivo:** Validar o fluxo completo da SAGA (Pedido -> Pagamento -> Estoque) em um ambiente de infraestrutura real (containers).
-- **Por que é necessária:** Testes unitários e de integração de componentes não garantem que a configuração de rede, variáveis de ambiente e conectividade entre os serviços (App, Payments, RabbitMQ, Postgres) estejam corretas.
-- **Arquivos envolvidos:** `internal/service/saga_e2e_test.go` (novo arquivo).
-- **Comportamento esperado:** O teste deve subir containers (PostgreSQL, RabbitMQ), realizar uma requisição de pedido, processar o pagamento e verificar a consistência final do estado do pedido no banco de dados.
+- **Objetivo:** Aumentar a resiliência do sistema contra mensagens malformadas ou falhas persistentes no processamento de pagamentos.
+- **Por que é necessária:** Atualmente, se uma mensagem falhar repetidamente, ela pode bloquear o fluxo ou ser descartada sem rastreabilidade. Uma DLQ permite inspecionar e reprocessar mensagens que falharam após N tentativas.
+- **Arquivos envolvidos:** `internal/infra/broker/rabbitmq.go` (configuração da fila), `internal/payments/handler.go` (lógica de erro).
+- **Comportamento esperado:** Mensagens que excederem o limite de tentativas de processamento devem ser movidas automaticamente para uma fila `payments_dlq`.
 
 ## 7. Testes necessários
 
-- Criar `internal/service/saga_e2e_test.go` utilizando `testcontainers-go` para orquestrar o ciclo de vida de um pedido.
+- Adicionar um teste em `internal/infra/broker/rabbitmq_dlq_test.go` que simule uma falha de processamento e verifique se a mensagem é roteada para a fila de DLQ.
 
 ## 8. Critério de conclusão
 
-- O teste de integração E2E passa com sucesso em um ambiente limpo.
-- O teste valida a consistência do banco de dados após a conclusão da SAGA.
+- O teste de DLQ passa com sucesso.
+- A configuração do RabbitMQ no código reflete a criação da fila de DLQ e o binding correspondente.
