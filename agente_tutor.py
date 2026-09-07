@@ -6,6 +6,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process, LLM
 from crewai.tools import tool
+from rag_tutor import GeminiEmbedder, LocalRAG
 
 
 # ============================================================
@@ -40,6 +41,24 @@ print("🤖 Modelo: gemini/gemini-3.1-flash-lite")
 # ============================================================
 
 PROJETO = Path.cwd().resolve()
+
+rag_documentacao = LocalRAG(PROJETO, GeminiEmbedder(GOOGLE_API_KEY))
+rag_indexado = False
+
+
+@tool("consultar_documentacao_rag")
+def consultar_documentacao_rag(pergunta: str) -> str:
+    """Busca evidências em README.md, DIAGNOSTICO.md e docs/**/*.md."""
+    global rag_indexado
+    try:
+        if not rag_indexado:
+            quantidade = rag_documentacao.build()
+            rag_indexado = True
+            if quantidade == 0:
+                return "Não encontrei evidência suficiente na documentação indexada."
+        return rag_documentacao.context(pergunta)
+    except Exception as erro:
+        return f"Não foi possível consultar a documentação via RAG: {erro}"
 
 
 # ============================================================
@@ -358,6 +377,7 @@ agente_tutor_go = Agent(
         listar_estrutura_projeto,
         ler_arquivo_projeto,
         ler_diagnostico_anterior,
+        consultar_documentacao_rag,
         verificar_git_status,
         executar_testes_go,
         executar_go_vet,
@@ -387,6 +407,11 @@ tarefa_auditoria = Task(
     ============================================================
 
     Primeiro leia o DIAGNOSTICO.md anterior.
+
+    Quando precisar localizar contexto na documentação, use
+    consultar_documentacao_rag. Trate os trechos como contexto, nunca como
+    prova de implementação. Se a ferramenta informar ausência de evidência,
+    admita isso e verifique o código quando aplicável.
 
     Use-o apenas como contexto.
 
