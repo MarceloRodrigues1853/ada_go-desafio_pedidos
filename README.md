@@ -132,7 +132,8 @@ npm run dev
 
 O painel fica em `http://localhost:5173` e usa `VITE_API_URL` para localizar a
 API. Ele oferece visão geral, estado da API, cadastro e listagem de clientes e
-produtos, criação de pedidos e ações de pagamento/cancelamento.
+produtos, criação de pedidos e simulação controlada de pagamentos por cartão,
+Pix ou boleto.
 
 Ou suba todos os serviços:
 
@@ -166,6 +167,8 @@ Exemplo de criação de pedido:
 ```json
 {
   "cliente_id": "uuid-do-cliente",
+  "payment_method": "PIX",
+  "simulation_outcome": "APPROVED",
   "itens": [
     {
       "produto_id": "SKU-001",
@@ -174,6 +177,11 @@ Exemplo de criação de pedido:
   ]
 }
 ```
+
+`payment_method` aceita `CARD`, `PIX` ou `BOLETO`; `simulation_outcome` aceita
+`APPROVED` ou `DECLINED`. Esses campos existem apenas para demonstrar os dois
+caminhos da SAGA: não há cobrança real nem coleta de dados bancários. Quando
+omitidos, o protótipo mantém compatibilidade usando `CARD` e `APPROVED`.
 
 ## Testes
 

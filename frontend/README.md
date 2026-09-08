@@ -2,6 +2,10 @@
 
 Painel operacional desenvolvido com React, TypeScript e Vite.
 
+Na criação de pedidos, o painel permite simular pagamentos por cartão, Pix ou
+boleto com aprovação ou recusa controlada. Nenhum dado bancário é coletado e
+nenhuma cobrança real é realizada.
+
 ## Configuração
 
 ```bash

@@ -15,6 +15,15 @@ export interface Product {
 }
 
 export type OrderStatus = 'PENDING' | 'PAID' | 'CANCELED'
+export type PaymentMethod = 'CARD' | 'PIX' | 'BOLETO'
+export type SimulationOutcome = 'APPROVED' | 'DECLINED'
+
+export interface CreateOrderInput {
+  cliente_id: string
+  payment_method: PaymentMethod
+  simulation_outcome: SimulationOutcome
+  itens: { produto_id: string; quantidade: number }[]
+}
 
 export interface Order {
   id: string
@@ -58,7 +67,7 @@ export const api = {
   },
   orders: {
     list: () => request<Order[]>('/pedidos?limit=100&offset=0'),
-    create: (data: { cliente_id: string; itens: { produto_id: string; quantidade: number }[] }) =>
+    create: (data: CreateOrderInput) =>
       request<Order>('/pedidos', { method: 'POST', body: JSON.stringify(data) }),
     pay: (id: string) => request<{ mensagem: string }>(`/pedidos/${id}/pagar`, { method: 'POST' }),
     cancel: (id: string) => request<{ mensagem: string }>(`/pedidos/${id}/cancelar`, { method: 'POST' }),
