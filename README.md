@@ -1,192 +1,275 @@
-# Sistema de Pedidos — Go, DDD e Clean Architecture
+# Sistema de Pedidos
 
-Sistema de pedidos para estudo de Domain-Driven Design (DDD), Clean Architecture, microsserviços, mensageria (SAGA) e observabilidade, com consistência transacional em PostgreSQL.
+[![CI](https://github.com/MarceloRodrigues1853/ada_go-desafio_pedidos/actions/workflows/ci.yml/badge.svg)](https://github.com/MarceloRodrigues1853/ada_go-desafio_pedidos/actions/workflows/ci.yml)
 
-## Fases implementadas
+Backend de pedidos desenvolvido em Go para demonstrar DDD, Clean Architecture,
+PostgreSQL, mensageria assíncrona, Saga, observabilidade e um agente tutor com
+RAG e LangGraph.
 
-| Fase | Descrição | Status |
-|---|---|---|
-| 1 | API monolítica com DDD, Clean Architecture e PostgreSQL | ✅ Concluída |
-| 2 | Microsserviço de pagamentos isolado (`cmd/payments`) | ✅ Concluída |
-| 3 | Mensageria assíncrona com RabbitMQ + Dead Letter Queue (DLQ) | ✅ Concluída |
-| 4 | Orquestração SAGA com compensação (`payment.failed` → cancelar + estornar) | ✅ Concluída |
-| 5 | Observabilidade: logs estruturados (`slog`) e métricas Prometheus | ✅ Concluída |
-| 6 | Documentação (README, DIAGNOSTICO.md e assets) | ✅ Concluída |
+## Funcionalidades
+
+- cadastro e consulta de clientes e produtos;
+- criação de pedidos com reserva transacional de estoque;
+- pagamento idempotente;
+- cancelamento com devolução de estoque;
+- Saga assíncrona por RabbitMQ;
+- compensação quando o pagamento falha;
+- Dead Letter Queue para mensagens rejeitadas;
+- logs estruturados com `saga_id`;
+- métricas Prometheus;
+- RAG local sobre a documentação com embeddings Gemini;
+- orquestração explícita do RAG com LangGraph.
 
 ## Arquitetura
 
 ```mermaid
 flowchart LR
-    C["Controller (HTTP)"] --> S["Service (casos de uso)"]
-    S --> D["Domain (invariantes)"]
-    S --> R["Repository ports"]
-    R --> P["Postgres adapters (sqlc)"]
-    P --> DB[(PostgreSQL)]
-
-    S -->|"order.created"| RB[(RabbitMQ)]
-    RB --> PM["Payments (microsserviço)"]
-    PM -->|"payment.processed"| RB
-    PM -->|"payment.failed"| RB
-    RB -->|"SAGA callback"| S
-    PM --> MET["/metrics :9091"]
-    S --> MET2["/metrics :8080"]
-    MET --> PR[(Prometheus :9090)]
-    MET2 --> PR
+    UI[Frontend planejado] --> API[API Go]
+    API --> C[Controllers]
+    C --> S[Services]
+    S --> D[Domain]
+    S --> R[Repository ports]
+    R --> PG[(PostgreSQL)]
+    S -->|order.created| MQ[(RabbitMQ)]
+    MQ --> PAY[Payments]
+    PAY -->|payment.processed ou payment.failed| MQ
+    MQ --> S
+    API --> MET[Prometheus metrics]
 ```
 
-### Fluxo da SAGA
+Responsabilidades:
 
-1. `POST /pedidos` cria o pedido, reserva o estoque e publica `order.created` no RabbitMQ.
-2. O microsserviço de pagamentos consome `order.created`, processa a cobrança (idempotente) e publica o resultado.
-3. `payment.processed` → o serviço de pedidos marca o pedido como `PAID` e encerra a SAGA.
-4. `payment.failed` → **compensação**: o pedido é cancelado e o estoque é estornado na mesma transação.
-5. Mensagens rejeitadas (Nack) são encaminhadas para a **Dead Letter Queue (DLQ)**.
+- `controllers`: HTTP e JSON;
+- `services`: coordenação dos casos de uso;
+- `domain`: entidades e invariantes;
+- `repositories`: persistência com pgx e código gerado pelo sqlc;
+- `infra`: RabbitMQ, logging e métricas;
+- `cmd/app` e `cmd/payments`: composition roots dos executáveis.
 
-## Estrutura
+## Fluxo da Saga
 
-```text
-cmd/app/                       composition root da API (HTTP e DI)
-cmd/payments/                  composition root do microsserviço de pagamentos
-internal/
-  controllers/                 adaptadores HTTP
-  domain/                      entidades, agregado e invariantes
-    order/                     Order e OrderItem
-  service/                     casos de uso, logging decorator e callbacks da SAGA
-  payments/                    serviço e handler de pagamentos (idempotência)
-  repository/
-    repository.go              portas e adaptadores PostgreSQL
-    db/                        código gerado pelo sqlc (não editar manualmente)
-  events/                      contratos dos eventos da SAGA (topics)
-  infra/
-    broker/                    RabbitMQ (publisher, consumer e DLQ)
-    metrics/                   coletores Prometheus
-    logger/                    handler de logs com propagação de saga_id
-migrations/                    schema e constraints de integridade
-sqlc/queries/                  fonte das queries SQL
-```
+1. `POST /pedidos` cria o pedido, reserva estoque e publica `order.created`.
+2. Payments consome o evento e processa a cobrança de forma idempotente.
+3. `payment.processed` marca o pedido como `PAID`.
+4. `payment.failed` cancela o pedido e devolve o estoque na mesma transação.
+5. Mensagens rejeitadas seguem para a DLQ.
 
-## Regras de negócio protegidas
+As afirmações da documentação devem ser confirmadas no código. O
+`DIAGNOSTICO.md` pode representar um momento anterior do projeto.
 
-- Pedido novo precisa ter pelo menos um item e inicia como `PENDING`.
-- Itens exigem quantidade e preço positivos.
-- O preço do item vem do catálogo persistido; o payload não define o preço da venda.
-- Estoque é reservado em uma transação e nunca pode ficar negativo.
-- Apenas pedidos `PENDING` podem ser pagos ou cancelados.
-- Cancelamento devolve estoque e altera status na mesma transação.
-- Pagamentos são **idempotentes** (um pedido nunca é pago duas vezes).
-- Respostas de cliente não expõem `password_hash`.
+## Regras de negócio
+
+- pedido novo exige pelo menos um item e começa como `PENDING`;
+- quantidade e preço precisam ser positivos;
+- o preço utilizado vem do catálogo persistido;
+- estoque é reservado transacionalmente e não pode ficar negativo;
+- somente pedidos pendentes podem ser pagos ou cancelados;
+- cancelamento devolve estoque;
+- pagamentos são idempotentes;
+- respostas de clientes não expõem `password_hash`.
 
 ## Tecnologias
 
-- Go 1.26+
-- PostgreSQL (pgx/v5 e pgxpool)
-- sqlc e golang-migrate
-- Chi
-- RabbitMQ (amqp091-go) + Dead Letter Queue
-- Prometheus (client_golang)
-- bcrypt
-- Docker e docker-compose
+- Go 1.26, Chi, pgx/v5 e sqlc;
+- PostgreSQL e golang-migrate;
+- RabbitMQ e Dead Letter Queue;
+- Prometheus e `slog`;
+- Python, Gemini Embeddings e LangGraph;
+- Docker Compose e GitHub Actions.
+
+## Configuração local
+
+Copie o exemplo e mantenha suas credenciais somente no `.env` ignorado pelo Git:
+
+```bash
+cp .env.example .env
+```
+
+Variáveis disponíveis:
+
+- `DB_URL`: conexão PostgreSQL;
+- `RABBITMQ_URL`: conexão AMQP;
+- `PORT`: porta da API, padrão `8080`;
+- `METRICS_PORT`: métricas de Payments, padrão `9091`;
+- `CORS_ALLOWED_ORIGINS`: origens permitidas, separadas por vírgula;
+- `GOOGLE_API_KEY`: chave usada apenas pelas demonstrações RAG.
+
+Nunca versione `.env`, URLs com credenciais ou chaves de API.
 
 ## Executar localmente
 
-Pré-requisitos: Go, Docker, `migrate` e `sqlc` instalados.
-
-### Opção A — Tudo via Docker (recomendado)
-
-Sobe PostgreSQL, RabbitMQ, API, payments e Prometheus:
+Suba a infraestrutura:
 
 ```bash
-docker-compose up -d
-docker-compose exec app sh   # (opcional) executar migrations dentro do container
+docker compose up -d postgres rabbitmq
 ```
 
-### Opção B — Local com infraestrutura em Docker
+Execute as migrations com `golang-migrate` instalado:
 
 ```bash
-docker-compose up -d postgres rabbitmq
-make migrate-up
-make run        # API em http://localhost:8080
-go run cmd/payments/main.go   # microsserviço de pagamentos
+migrate -path migrations -database "$DB_URL" -verbose up
 ```
 
-Configure `.env` com `DB_URL` e, opcionalmente, `PORT`, `RABBITMQ_URL` e `METRICS_PORT`.
+Inicie a API e Payments em terminais separados:
+
+```bash
+go run ./cmd/app
+```
+
+```bash
+go run ./cmd/payments
+```
+
+Ou suba todos os serviços:
+
+```bash
+docker compose up -d
+```
+
+Para liberar recursos preservando os volumes:
+
+```bash
+docker compose stop
+```
 
 ## Endpoints
 
-### API de pedidos (`:8080`)
+API de pedidos:
 
-| Método | Rota | Descrição |
-|---|---|---|
-| POST | `/clientes` | Cria cliente |
-| GET | `/clientes` | Lista clientes sem hash de senha |
-| GET | `/clientes/{id}` | Busca cliente |
-| POST | `/produtos` | Cria produto válido |
-| GET | `/produtos` | Lista produtos |
-| GET | `/produtos/{id}` | Busca produto |
-| POST | `/pedidos` | Cria pedido, reserva estoque e dispara a SAGA |
-| GET | `/pedidos?limit=10&offset=0` | Lista pedidos paginados |
-| GET | `/pedidos/{id}` | Busca pedido |
-| POST | `/pedidos/{id}/pagar` | Paga pedido pendente |
-| POST | `/pedidos/{id}/cancelar` | Cancela pedido pendente e estorna estoque |
-| GET | `/metrics` | Métricas Prometheus da API |
+- `GET /health`: liveness da API;
+- `GET /ready`: readiness com verificação do PostgreSQL;
+- `GET /metrics`: métricas Prometheus;
+- `POST /clientes`, `GET /clientes`, `GET /clientes/{id}`;
+- `POST /produtos`, `GET /produtos`, `GET /produtos/{id}`;
+- `POST /pedidos`, `GET /pedidos`, `GET /pedidos/{id}`;
+- `POST /pedidos/{id}/pagar`;
+- `POST /pedidos/{id}/cancelar`.
 
-### Microsserviço de pagamentos (`:9091`)
+Payments expõe `GET /metrics` na porta configurada em `METRICS_PORT`.
 
-| Método | Rota | Descrição |
-|---|---|---|
-| GET | `/metrics` | Métricas Prometheus (pagamentos processados, mensagens na DLQ) |
-
-### Painéis
-
-- RabbitMQ Management: http://localhost:15672 (`guest`/`guest`)
-- Prometheus: http://localhost:9090
-
-### Exemplo: criar pedido
+Exemplo de criação de pedido:
 
 ```json
 {
   "cliente_id": "uuid-do-cliente",
   "itens": [
-    { "produto_id": "SKU-001", "quantidade": 2 }
+    {
+      "produto_id": "SKU-001",
+      "quantidade": 2
+    }
   ]
 }
 ```
 
-`preco_unitario`, se presente, é ignorado. O service usa o preço atual do produto no catálogo ao criar o item.
-
-## Métricas expostas
-
-| Métrica | Tipo | Descrição |
-|---|---|---|
-| `orders_created_total` | Counter | Total de pedidos criados |
-| `payments_processed_total{status}` | CounterVec | Pagamentos processados por status (`PAID`/`FAILED`) |
-| `messages_dlq_total` | Counter | Mensagens rejeitadas enviadas à DLQ |
-| `order_processing_duration_seconds` | Histogram | Latência do processamento de pedidos |
-
-## Status HTTP
-
-- `201 Created`: cliente, produto ou pedido criado.
-- `200 OK`: consulta, pagamento ou cancelamento concluído.
-- `400 Bad Request`: JSON, UUID ou invariantes de entrada inválidos.
-- `404 Not Found`: cliente, produto ou pedido inexistente.
-- `409 Conflict`: e-mail/produto duplicado, estoque insuficiente ou pedido fora de `PENDING`.
-- `500 Internal Server Error`: falha de infraestrutura.
-
 ## Testes
 
+Testes unitários e validação estática, sem Docker:
+
 ```bash
-go test ./...
 go vet ./...
+go test ./...
 ```
 
-A suíte combina testes de domínio, controllers, SAGA, DLQ e integração com PostgreSQL. Os testes de integração usam `DB_URL` e criam dados de teste com IDs/e-mails únicos.
+Testes Python, sem chamadas ao Gemini:
 
-## Banco e migrations
+```bash
+source .venv/Scripts/activate
+python -m pip install -r requirements.txt
+python -m unittest -v test_rag_tutor.py
+python -m unittest -v test_langgraph_rag.py
+```
 
-Execute as migrations de `migrations/` (incluindo `000004_add_domain_constraints.up.sql`, que adiciona constraints de preço positivo, estoque não negativo, quantidade positiva e status permitido).
+Testes de integração com PostgreSQL e RabbitMQ ativos:
 
-Não edite `internal/repository/db/*.go` manualmente: esses arquivos são gerados por `sqlc` a partir de `sqlc/queries`.
+```bash
+docker compose up -d postgres rabbitmq
+go test -tags=integration ./internal/controllers ./internal/service ./internal/infra/broker
+docker compose stop postgres rabbitmq
+```
 
-## Documentação de estudo
+E2E isolado com Testcontainers e Docker ativo:
 
-O vault Obsidian `DDD-Pedidos` contém a visão arquitetural, os casos de uso e os cards de revisão. O relatório `DIAGNOSTICO.md` traz a auditoria arquitetural e o próximo passo recomendado (teste E2E com testcontainers-go).
+```bash
+go test -tags=e2e ./cmd/app -run TestSagaE2E -v
+```
+
+O GitHub Actions executa automaticamente vet, testes Go sem infraestrutura e
+as duas suítes Python em pushes e pull requests.
+
+## Agente tutor, RAG e LangGraph
+
+O `LocalRAG` indexa somente `README.md`, `DIAGNOSTICO.md` e `docs/**/*.md`, gera
+embeddings com Gemini e faz busca local por similaridade de cosseno. O limite
+inicial é `0.65` e respostas sem evidência são explicitamente recusadas.
+
+LangGraph não substitui a recuperação. Ele apenas orquestra:
+
+```mermaid
+flowchart TD
+    START --> V[validar_pergunta]
+    V --> R[recuperar_contexto]
+    R --> E[verificar_evidencia]
+    E -->|suficiente| F[formatar_resultados]
+    E -->|insuficiente| A[informar_ausencia]
+    F --> END
+    A --> END
+```
+
+Demonstrações:
+
+```bash
+python demo_rag.py
+python demo_langgraph_rag.py
+```
+
+Detalhes, segurança e limitações estão em [`docs/RAG.md`](docs/RAG.md).
+
+## Observabilidade
+
+- `orders_created_total`;
+- `payments_processed_total{status}`;
+- `messages_dlq_total`;
+- `order_processing_duration_seconds`;
+- logs JSON com correlação por `saga_id`.
+
+O Prometheus local fica disponível em `http://localhost:9090` e o painel do
+RabbitMQ em `http://localhost:15672`.
+
+## Preparação para cloud
+
+O `render.yaml` prepara a API para um Render Web Service usando o Dockerfile e
+`/health`. No primeiro Blueprint, informe pelo painel:
+
+- `DB_URL`: PostgreSQL externo, preferencialmente Neon;
+- `RABBITMQ_URL`: broker gerenciado;
+- `CORS_ALLOWED_ORIGINS`: URL HTTPS do frontend.
+
+Segredos usam `sync: false` e não ficam no repositório. O Render fornece `PORT`
+automaticamente. O frontend React/Vite e sua configuração Vercel serão criados
+em uma etapa posterior.
+
+## Estrutura relevante
+
+```text
+cmd/app/                    API e composition root
+cmd/payments/               consumidor de pagamentos
+internal/domain/            invariantes
+internal/service/           casos de uso e Saga
+internal/repository/        portas e persistência PostgreSQL
+internal/infra/             broker, logger e métricas
+migrations/                 migrations PostgreSQL
+docs/RAG.md                 documentação do RAG
+rag_tutor.py                recuperação local
+langgraph_rag.py            orquestração do RAG
+.github/workflows/ci.yml    integração contínua
+render.yaml                 Blueprint da API no Render
+```
+
+## Próximas etapas
+
+- criar frontend React, TypeScript e Vite;
+- publicar o frontend na Vercel;
+- provisionar PostgreSQL no Neon;
+- publicar a API no Render;
+- definir hospedagem adequada para RabbitMQ e Payments;
+- adicionar cache e avaliação sistemática dos embeddings.

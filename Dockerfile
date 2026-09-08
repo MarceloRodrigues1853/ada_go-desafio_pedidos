@@ -16,16 +16,16 @@ COPY . .
 RUN CGO_ENABLED=0 go build -o /out/app ./cmd/app \
  && CGO_ENABLED=0 go build -o /out/payments ./cmd/payments
 
-# Estágio 2: imagem final do serviço de pedidos (API HTTP)
-FROM alpine:3.21 AS app
-RUN apk add --no-cache ca-certificates
-COPY --from=builder /out/app /usr/local/bin/app
-EXPOSE 8080
-ENTRYPOINT ["app"]
-
-# Estágio 3: imagem final do microsserviço de pagamentos (consumer RabbitMQ)
+# Estágio 2: imagem final do microsserviço de pagamentos (consumer RabbitMQ)
 FROM alpine:3.21 AS payments
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /out/payments /usr/local/bin/payments
 EXPOSE 9091
 ENTRYPOINT ["payments"]
+
+# Estágio 3: imagem final da API. É o estágio padrão para plataformas como Render.
+FROM alpine:3.21 AS app
+RUN apk add --no-cache ca-certificates
+COPY --from=builder /out/app /usr/local/bin/app
+EXPOSE 8080
+ENTRYPOINT ["app"]
