@@ -17,6 +17,7 @@ from urllib.request import Request, urlopen
 
 EmbeddingFunction = Callable[[str, str], Sequence[float]]
 NO_EVIDENCE = "Não encontrei evidência suficiente na documentação indexada."
+DEFAULT_MIN_SIMILARITY = 0.65
 
 
 @dataclass(frozen=True)
@@ -174,7 +175,12 @@ class LocalRAG:
                 self._index.append((chunk, vector))
         return len(self._index)
 
-    def search(self, query: str, limit: int = 3, min_score: float = 0.55) -> list[SearchResult]:
+    def search(
+        self,
+        query: str,
+        limit: int = 3,
+        min_score: float = DEFAULT_MIN_SIMILARITY,
+    ) -> list[SearchResult]:
         if not query.strip() or not self._index:
             return []
         query_vector = self.embed(query, "RETRIEVAL_QUERY")
@@ -185,7 +191,12 @@ class LocalRAG:
         results.sort(key=lambda result: result.score, reverse=True)
         return [result for result in results if result.score >= min_score][:limit]
 
-    def context(self, query: str, limit: int = 3, min_score: float = 0.55) -> str:
+    def context(
+        self,
+        query: str,
+        limit: int = 3,
+        min_score: float = DEFAULT_MIN_SIMILARITY,
+    ) -> str:
         results = self.search(query, limit=limit, min_score=min_score)
         if not results:
             return NO_EVIDENCE
