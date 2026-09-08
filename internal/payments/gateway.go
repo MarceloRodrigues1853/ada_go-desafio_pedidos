@@ -23,9 +23,10 @@ const (
 )
 
 var (
-	ErrInvalidPaymentMethod  = errors.New("método de pagamento inválido")
-	ErrInvalidPaymentAmount  = errors.New("valor do pagamento deve ser maior que zero")
-	ErrInvalidPaymentOutcome = errors.New("resultado de pagamento inválido")
+	ErrInvalidPaymentMethod   = errors.New("método de pagamento inválido")
+	ErrInvalidPaymentAmount   = errors.New("valor do pagamento deve ser maior que zero")
+	ErrInvalidPaymentOutcome  = errors.New("resultado de pagamento inválido")
+	ErrPaymentGatewayRequired = errors.New("gateway de pagamento não configurado")
 )
 
 // PaymentInput contém somente os dados necessários para solicitar um pagamento.
