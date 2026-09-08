@@ -24,7 +24,7 @@ RAG e LangGraph.
 
 ```mermaid
 flowchart LR
-    UI[Frontend planejado] --> API[API Go]
+    UI[Frontend React] --> API[API Go]
     API --> C[Controllers]
     C --> S[Services]
     S --> D[Domain]
@@ -75,6 +75,7 @@ As afirmações da documentação devem ser confirmadas no código. O
 - RabbitMQ e Dead Letter Queue;
 - Prometheus e `slog`;
 - Python, Gemini Embeddings e LangGraph;
+- React, TypeScript e Vite;
 - Docker Compose e GitHub Actions.
 
 ## Configuração local
@@ -119,6 +120,19 @@ go run ./cmd/app
 ```bash
 go run ./cmd/payments
 ```
+
+Em um terceiro terminal, inicie o frontend:
+
+```bash
+cd frontend
+cp .env.example .env
+npm install
+npm run dev
+```
+
+O painel fica em `http://localhost:5173` e usa `VITE_API_URL` para localizar a
+API. Ele oferece visão geral, estado da API, cadastro e listagem de clientes e
+produtos, criação de pedidos e ações de pagamento/cancelamento.
 
 Ou suba todos os serviços:
 
@@ -193,8 +207,8 @@ E2E isolado com Testcontainers e Docker ativo:
 go test -tags=e2e ./cmd/app -run TestSagaE2E -v
 ```
 
-O GitHub Actions executa automaticamente vet, testes Go sem infraestrutura e
-as duas suítes Python em pushes e pull requests.
+O GitHub Actions executa automaticamente vet, testes Go sem infraestrutura, as
+duas suítes Python e build/lint do frontend em pushes e pull requests.
 
 ## Agente tutor, RAG e LangGraph
 
@@ -245,8 +259,8 @@ O `render.yaml` prepara a API para um Render Web Service usando o Dockerfile e
 - `CORS_ALLOWED_ORIGINS`: URL HTTPS do frontend.
 
 Segredos usam `sync: false` e não ficam no repositório. O Render fornece `PORT`
-automaticamente. O frontend React/Vite e sua configuração Vercel serão criados
-em uma etapa posterior.
+automaticamente. O frontend React/Vite já está em `frontend/`; sua publicação
+na Vercel será configurada depois que a API tiver uma URL pública.
 
 ## Estrutura relevante
 
@@ -263,11 +277,11 @@ rag_tutor.py                recuperação local
 langgraph_rag.py            orquestração do RAG
 .github/workflows/ci.yml    integração contínua
 render.yaml                 Blueprint da API no Render
+frontend/                   painel React, TypeScript e Vite
 ```
 
 ## Próximas etapas
 
-- criar frontend React, TypeScript e Vite;
 - publicar o frontend na Vercel;
 - provisionar PostgreSQL no Neon;
 - publicar a API no Render;
