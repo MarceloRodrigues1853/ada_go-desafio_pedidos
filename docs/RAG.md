@@ -2,7 +2,8 @@
 
 ## Arquitetura resumida
 
-O protótipo implementa RAG sem LangChain, LangGraph ou banco vetorial. O fluxo é:
+O protótipo mantém duas formas de executar a mesma recuperação, sem banco
+vetorial e sem usar um LLM nos passos de controle. O fluxo simples é:
 
 1. descobrir somente os arquivos permitidos;
 2. dividir o Markdown em trechos com sobreposição;
@@ -18,8 +19,37 @@ falso positivo de `0.552`. Esse corte reduz aquele falso positivo, mas não é u
 garantia universal e deve ser recalibrado com mais perguntas representativas.
 
 `rag_tutor.py` contém o núcleo reutilizável. `agente_tutor.py` integra esse núcleo
-ao CrewAI. `demo_rag.py` oferece uma demonstração isolada no terminal e não
+ao CrewAI. `demo_rag.py` oferece uma demonstração direta no terminal e não
 executa a auditoria nem altera `DIAGNOSTICO.md`.
+
+## Arquitetura com LangGraph
+
+`langgraph_rag.py` adiciona uma segunda forma de execução. LangGraph orquestra
+validação, recuperação, decisão e formatação; `LocalRAG` continua sendo o único
+responsável por indexar, chamar embeddings Gemini e calcular similaridade.
+Nenhum LLM é usado dentro dos nós.
+
+```mermaid
+flowchart TD
+    START([START]) --> VP[validar_pergunta]
+    VP --> RC[recuperar_contexto]
+    RC --> VE[verificar_evidencia]
+    VE -->|evidência suficiente| FR[formatar_resultados]
+    VE -->|evidência insuficiente ou erro| IA[informar_ausencia]
+    FR --> END([END])
+    IA --> END
+```
+
+Responsabilidades dos nós:
+
+- `validar_pergunta`: remove espaços e aplica o threshold padrão quando ausente;
+- `recuperar_contexto`: chama `LocalRAG.search()` e registra falhas controladas;
+- `verificar_evidencia`: confirma se há resultado que atingiu o threshold;
+- `formatar_resultados`: preserva fonte, posição, similaridade e conteúdo;
+- `informar_ausencia`: retorna a mensagem formal de ausência de evidência.
+
+Cada nó recebe o estado e devolve somente suas atualizações, sem mutá-lo. A
+sequência executada é observada fora do estado e exibida pelo demo.
 
 ## Arquivos indexados
 
@@ -51,6 +81,7 @@ No Git Bash para Windows:
 cd /c/Users/marce/projetcs/ada/go-backend/modulo-01/desafio-pedidos
 source .venv/Scripts/activate
 python -m unittest -v test_rag_tutor.py
+python -m unittest -v test_langgraph_rag.py
 ```
 
 Se `.venv` não funcionar:
@@ -63,6 +94,7 @@ Se o comando `python` não estiver disponível:
 
 ```bash
 py -3 -m unittest -v test_rag_tutor.py
+py -3 -m unittest -v test_langgraph_rag.py
 ```
 
 Os testes usam embeddings falsos e não acessam o Gemini.
@@ -77,6 +109,7 @@ prioridade e não é sobrescrita.
 cd /c/Users/marce/projetcs/ada/go-backend/modulo-01/desafio-pedidos
 source .venv/Scripts/activate
 python demo_rag.py
+python demo_langgraph_rag.py
 ```
 
 Se `.venv` não funcionar:
@@ -84,18 +117,38 @@ Se `.venv` não funcionar:
 ```bash
 source venv/Scripts/activate
 python demo_rag.py
+python demo_langgraph_rag.py
 ```
 
 Se o comando `python` não estiver disponível:
 
 ```bash
 py -3 demo_rag.py
+py -3 demo_langgraph_rag.py
 ```
 
 O programa mostra quantos documentos e trechos foram indexados. Para cada
 resultado, exibe arquivo, posição do trecho, similaridade e conteúdo. Também
 mostra o limite mínimo usado. Se todos os resultados ficarem abaixo do limite,
 exibe `Nenhuma evidência suficiente` e a mensagem formal de ausência.
+
+O demo LangGraph também mostra a sequência de nós e o estado final relevante.
+Para instalar a dependência registrada, se necessário:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+## Comparação objetiva
+
+A versão simples chama `LocalRAG` diretamente e tem menos abstrações, sendo a
+melhor referência para entender recuperação e similaridade. A versão LangGraph
+usa exatamente o mesmo `LocalRAG`, mas torna explícitos os estados, passos e
+ramos condicionais, o que facilita observar e evoluir fluxos maiores.
+
+LangGraph não melhora embeddings, ranking ou qualidade documental por si só.
+Nesta versão ele acrescenta somente orquestração. O custo externo de ambas as
+formas continua restrito aos embeddings Gemini.
 
 ## Exemplos de perguntas
 
@@ -148,5 +201,7 @@ o assunto e valide a implementação real nos arquivos de código e configuraç�
 - ainda podem ocorrer falsos positivos acima de `0.65` e falsos negativos abaixo;
 - o chunking considera tamanho textual, não tokens nem estrutura semântica;
 - a recuperação encontra evidências, mas não gera uma resposta final;
+- LangGraph adiciona estrutura e uma dependência sem alterar a qualidade da busca;
+- o grafo usa estado em memória e não possui checkpoint ou persistência;
 - documentação pode estar desatualizada, contraditória ou refletir outro momento
   do projeto, por isso não substitui a confirmação no código.
