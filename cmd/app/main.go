@@ -8,6 +8,8 @@ import (
 	"log/slog" // Logs estruturados
 	"net/http" // Servidor e rotas HTTP
 	"os"       // Interage com o sistema operacional e lê variáveis do .env
+	"strings"
+	"time"
 
 	// Camadas internas da aplicação
 	"pedidos/internal/controllers" // Handlers Web
@@ -140,7 +142,13 @@ func main() {
 	// =========================================================================
 	// 4. CONFIGURAÇÃO DE ROTAS E MIDDLEWARES (CHI ROUTER)
 	// =========================================================================
-	r := newRouter(clientController, productController, orderController)
+	r := newRouter(
+		clientController,
+		productController,
+		orderController,
+		pool,
+		os.Getenv("CORS_ALLOWED_ORIGINS"),
+	)
 
 	// =========================================================================
 	// 5. INICIALIZAÇÃO DO SERVIDOR HTTP
@@ -164,11 +172,18 @@ func newRouter(
 	clientController *controllers.ClientController,
 	productController *controllers.ProductController,
 	orderController *controllers.OrderController,
+	database databasePinger,
+	allowedOrigins string,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)    // Loga cada requisição HTTP no console
 	r.Use(middleware.Recoverer) // Evita crash da aplicação em caso de erro grave
+	r.Use(corsMiddleware(allowedOrigins))
+
+	// --- ROTAS DE SAÚDE PARA ORQUESTRADORES E PLATAFORMAS DE CLOUD ---
+	r.Get("/health", healthHandler)
+	r.Get("/ready", readinessHandler(database))
 
 	// --- ROTA DE MÉTRICAS PROMETHEUS (OBSERVABILIDADE) ---
 	r.Handle("/metrics", promhttp.Handler())
@@ -191,4 +206,65 @@ func newRouter(
 	r.Post("/pedidos/{id}/cancelar", orderController.Cancel)
 
 	return r
+}
+
+type databasePinger interface {
+	Ping(context.Context) error
+}
+
+func healthHandler(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`{"status":"ok"}`))
+}
+
+func readinessHandler(database databasePinger) http.HandlerFunc {
+	return func(w http.ResponseWriter, request *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if database == nil {
+			http.Error(w, `{"status":"unavailable"}`, http.StatusServiceUnavailable)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(request.Context(), 2*time.Second)
+		defer cancel()
+		if err := database.Ping(ctx); err != nil {
+			http.Error(w, `{"status":"unavailable"}`, http.StatusServiceUnavailable)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ready"}`))
+	}
+}
+
+func corsMiddleware(configuredOrigins string) func(http.Handler) http.Handler {
+	allowed := make(map[string]struct{})
+	if strings.TrimSpace(configuredOrigins) == "" {
+		configuredOrigins = "http://localhost:5173"
+	}
+	for _, origin := range strings.Split(configuredOrigins, ",") {
+		if trimmed := strings.TrimSpace(origin); trimmed != "" {
+			allowed[trimmed] = struct{}{}
+		}
+	}
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+			origin := request.Header.Get("Origin")
+			_, exactMatch := allowed[origin]
+			_, wildcard := allowed["*"]
+			if origin != "" && (exactMatch || wildcard) {
+				w.Header().Add("Vary", "Origin")
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			}
+			if request.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, request)
+		})
+	}
 }

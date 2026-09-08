@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,13 +13,21 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+type fakeDatabasePinger struct {
+	err error
+}
+
+func (fake fakeDatabasePinger) Ping(context.Context) error {
+	return fake.err
+}
+
 // TestMetricsEndpoint verifica que GET /metrics responde 200, com Content-Type
 // compatível com Prometheus e contendo as métricas registradas pela aplicação.
 func TestMetricsEndpoint(t *testing.T) {
 	metrics.InitMetrics()                // mesmo registro que main() faz em produção
 	metrics.IncPaymentsProcessed("PAID") // garante a emissão do CounterVec no /metrics
 
-	router := newRouter(nil, nil, nil)
+	router := newRouter(nil, nil, nil, fakeDatabasePinger{}, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	rr := httptest.NewRecorder()
@@ -48,7 +58,7 @@ func TestMetricsEndpoint(t *testing.T) {
 // TestMetricsEndpointDoesNotInterfere verifica que o endpoint /metrics não
 // interfere no roteamento: rotas desconhecidas continuam retornando 404.
 func TestMetricsEndpointDoesNotInterfere(t *testing.T) {
-	router := newRouter(nil, nil, nil)
+	router := newRouter(nil, nil, nil, fakeDatabasePinger{}, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/rota-inexistente", nil)
 	rr := httptest.NewRecorder()
@@ -62,9 +72,11 @@ func TestMetricsEndpointDoesNotInterfere(t *testing.T) {
 // TestExistingRoutesStillRegistered verifica que todas as rotas existentes
 // continuam registradas no roteador após a inclusão de /metrics.
 func TestExistingRoutesStillRegistered(t *testing.T) {
-	router := newRouter(nil, nil, nil)
+	router := newRouter(nil, nil, nil, fakeDatabasePinger{}, "")
 
 	cases := []struct{ method, path string }{
+		{"GET", "/health"},
+		{"GET", "/ready"},
 		{"GET", "/metrics"},
 		{"POST", "/clientes"},
 		{"GET", "/clientes"},
@@ -88,4 +100,73 @@ func TestExistingRoutesStillRegistered(t *testing.T) {
 	if router.Match(chi.NewRouteContext(), http.MethodGet, "/rota-inexistente") {
 		t.Error("rota desconhecida deveria continuar sem match")
 	}
+}
+
+func TestHealthEndpoint(t *testing.T) {
+	router := newRouter(nil, nil, nil, fakeDatabasePinger{}, "")
+	request := httptest.NewRequest(http.MethodGet, "/health", nil)
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK || strings.TrimSpace(response.Body.String()) != `{"status":"ok"}` {
+		t.Fatalf("GET /health: resposta inesperada: status=%d body=%q", response.Code, response.Body.String())
+	}
+}
+
+func TestReadinessEndpoint(t *testing.T) {
+	tests := []struct {
+		name       string
+		database   databasePinger
+		wantStatus int
+	}{
+		{name: "banco disponível", database: fakeDatabasePinger{}, wantStatus: http.StatusOK},
+		{name: "banco indisponível", database: fakeDatabasePinger{err: errors.New("offline")}, wantStatus: http.StatusServiceUnavailable},
+		{name: "sem banco", database: nil, wantStatus: http.StatusServiceUnavailable},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			router := newRouter(nil, nil, nil, test.database, "")
+			request := httptest.NewRequest(http.MethodGet, "/ready", nil)
+			response := httptest.NewRecorder()
+
+			router.ServeHTTP(response, request)
+
+			if response.Code != test.wantStatus {
+				t.Fatalf("GET /ready: esperado %d, obtido %d", test.wantStatus, response.Code)
+			}
+		})
+	}
+}
+
+func TestCORSMiddleware(t *testing.T) {
+	router := newRouter(nil, nil, nil, fakeDatabasePinger{}, "https://app.example.com")
+
+	t.Run("origem permitida", func(t *testing.T) {
+		request := httptest.NewRequest(http.MethodOptions, "/pedidos", nil)
+		request.Header.Set("Origin", "https://app.example.com")
+		response := httptest.NewRecorder()
+
+		router.ServeHTTP(response, request)
+
+		if response.Code != http.StatusNoContent {
+			t.Fatalf("OPTIONS /pedidos: esperado 204, obtido %d", response.Code)
+		}
+		if got := response.Header().Get("Access-Control-Allow-Origin"); got != "https://app.example.com" {
+			t.Errorf("Access-Control-Allow-Origin inesperado: %q", got)
+		}
+	})
+
+	t.Run("origem não permitida", func(t *testing.T) {
+		request := httptest.NewRequest(http.MethodOptions, "/pedidos", nil)
+		request.Header.Set("Origin", "https://malicious.example.com")
+		response := httptest.NewRecorder()
+
+		router.ServeHTTP(response, request)
+
+		if got := response.Header().Get("Access-Control-Allow-Origin"); got != "" {
+			t.Errorf("origem não permitida recebeu cabeçalho CORS: %q", got)
+		}
+	})
 }
