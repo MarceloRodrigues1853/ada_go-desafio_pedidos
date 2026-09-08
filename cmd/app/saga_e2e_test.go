@@ -1,4 +1,4 @@
-//go:build integration
+//go:build e2e
 
 package main
 
@@ -89,6 +89,8 @@ func TestSagaE2E_FluxoFeliz(t *testing.T) {
 		controllers.NewClientController(service.NewClientService(clientRepository)),
 		controllers.NewProductController(service.NewProductService(productRepository)),
 		controllers.NewOrderController(orderService),
+		pool,
+		"",
 	)
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
