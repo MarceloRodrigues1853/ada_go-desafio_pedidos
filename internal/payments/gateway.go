@@ -32,8 +32,9 @@ var (
 // PaymentInput contém somente os dados necessários para solicitar um pagamento.
 // Dados sensíveis de cartão não fazem parte do protótipo.
 type PaymentInput struct {
-	Method PaymentMethod
-	Amount float64
+	Method            PaymentMethod
+	Amount            float64
+	SimulationOutcome PaymentOutcome
 }
 
 // PaymentResult contém a decisão retornada pelo gateway.
@@ -72,14 +73,18 @@ func (g *FakePaymentGateway) Process(ctx context.Context, input PaymentInput) (P
 	if input.Amount <= 0 {
 		return PaymentResult{}, ErrInvalidPaymentAmount
 	}
-	if !g.outcome.IsValid() {
+	outcome := g.outcome
+	if input.SimulationOutcome != "" {
+		outcome = input.SimulationOutcome
+	}
+	if !outcome.IsValid() {
 		return PaymentResult{}, ErrInvalidPaymentOutcome
 	}
 
 	return PaymentResult{
 		Method:  input.Method,
 		Amount:  input.Amount,
-		Outcome: g.outcome,
+		Outcome: outcome,
 		Reason:  g.reason,
 	}, nil
 }

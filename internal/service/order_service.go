@@ -9,6 +9,7 @@ import (
 	"pedidos/internal/domain/order"
 	"pedidos/internal/events"
 	"pedidos/internal/infra/metrics"
+	"pedidos/internal/payments"
 	"pedidos/internal/repository"
 
 	"github.com/google/uuid"
@@ -18,6 +19,13 @@ import (
 type OrderItemInput struct {
 	ProductID string
 	Quantity  int
+}
+
+// PaymentSelection controla somente o comportamento do gateway simulado.
+// Nenhum dado sensível de pagamento é recebido ou armazenado.
+type PaymentSelection struct {
+	Method            payments.PaymentMethod
+	SimulationOutcome payments.PaymentOutcome
 }
 
 // OrderOutput é a representação do pedido devolvida pela API.
@@ -32,6 +40,7 @@ type OrderOutput struct {
 // É implementada pelo OrderService e pelo decorator LoggingOrderService.
 type OrderServiceInterface interface {
 	Create(context.Context, uuid.UUID, []OrderItemInput) (*OrderOutput, error)
+	CreateWithPayment(context.Context, uuid.UUID, []OrderItemInput, PaymentSelection) (*OrderOutput, error)
 	GetByID(context.Context, uuid.UUID) (*OrderOutput, error)
 	ListPaginado(context.Context, int32, int32) ([]OrderOutput, error)
 	Pay(context.Context, uuid.UUID) error
@@ -58,10 +67,32 @@ func NewOrderService(clients repository.ClientRepository, products repository.Pr
 // o pedido reservando o estoque dentro de uma única transação. Ao final,
 // publica o evento order.created para iniciar a SAGA de pagamento.
 func (s *OrderService) Create(ctx context.Context, clientID uuid.UUID, inputs []OrderItemInput) (*OrderOutput, error) {
+	return s.CreateWithPayment(ctx, clientID, inputs, PaymentSelection{
+		Method:            payments.PaymentMethodCard,
+		SimulationOutcome: payments.PaymentOutcomeApproved,
+	})
+}
+
+// CreateWithPayment cria o pedido e inclui no evento a decisão controlada da
+// demonstração. A escolha não é persistida e não representa uma cobrança real.
+func (s *OrderService) CreateWithPayment(ctx context.Context, clientID uuid.UUID, inputs []OrderItemInput, payment PaymentSelection) (*OrderOutput, error) {
 	start := time.Now()
 	defer func() {
 		metrics.ObserveOrderProcessing(time.Since(start).Seconds())
 	}()
+
+	if payment.Method == "" {
+		payment.Method = payments.PaymentMethodCard
+	}
+	if payment.SimulationOutcome == "" {
+		payment.SimulationOutcome = payments.PaymentOutcomeApproved
+	}
+	if !payment.Method.IsValid() {
+		return nil, payments.ErrInvalidPaymentMethod
+	}
+	if !payment.SimulationOutcome.IsValid() {
+		return nil, payments.ErrInvalidPaymentOutcome
+	}
 
 	// 1. O cliente precisa existir.
 	if _, err := s.clients.GetByID(ctx, clientID); err != nil {
@@ -110,12 +141,14 @@ func (s *OrderService) Create(ctx context.Context, clientID uuid.UUID, inputs []
 	// 5. Publica o evento para o microsserviço de pagamentos (início da SAGA).
 	if s.eventPublisher != nil {
 		event := events.OrderCreatedEvent{
-			SagaID:      uuid.New(),
-			OrderID:     record.Order.ID(),
-			ClientID:    record.Order.ClientID(),
-			TotalAmount: record.Order.CalculateTotal(),
-			Status:      string(record.Order.Status()),
-			CreatedAt:   record.CreatedAt,
+			SagaID:            uuid.New(),
+			OrderID:           record.Order.ID(),
+			ClientID:          record.Order.ClientID(),
+			TotalAmount:       record.Order.CalculateTotal(),
+			Status:            string(record.Order.Status()),
+			PaymentMethod:     string(payment.Method),
+			SimulationOutcome: string(payment.SimulationOutcome),
+			CreatedAt:         record.CreatedAt,
 		}
 		if err := s.eventPublisher.Publish(ctx, events.TopicOrderCreated, event); err != nil {
 			return nil, err

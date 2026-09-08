@@ -58,6 +58,22 @@ func TestFakePaymentGatewayDeclinesPayment(t *testing.T) {
 	}
 }
 
+func TestFakePaymentGatewayUsesOutcomeRequestedBySimulation(t *testing.T) {
+	gateway := NewFakePaymentGateway(PaymentOutcomeApproved, "")
+
+	result, err := gateway.Process(context.Background(), PaymentInput{
+		Method:            PaymentMethodPix,
+		Amount:            80,
+		SimulationOutcome: PaymentOutcomeDeclined,
+	})
+	if err != nil {
+		t.Fatalf("Process() retornou erro: %v", err)
+	}
+	if result.Outcome != PaymentOutcomeDeclined {
+		t.Errorf("resultado = %q; esperado %q", result.Outcome, PaymentOutcomeDeclined)
+	}
+}
+
 func TestFakePaymentGatewayRejectsInvalidMethod(t *testing.T) {
 	gateway := NewFakePaymentGateway(PaymentOutcomeApproved, "")
 

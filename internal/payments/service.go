@@ -46,9 +46,15 @@ func (s *PaymentService) ProcessPayment(ctx context.Context, orderCreated events
 		return nil, ErrPaymentGatewayRequired
 	}
 
+	method := s.method
+	if orderCreated.PaymentMethod != "" {
+		method = PaymentMethod(orderCreated.PaymentMethod)
+	}
+
 	result, err := s.gateway.Process(ctx, PaymentInput{
-		Method: s.method,
-		Amount: orderCreated.TotalAmount,
+		Method:            method,
+		Amount:            orderCreated.TotalAmount,
+		SimulationOutcome: PaymentOutcome(orderCreated.SimulationOutcome),
 	})
 	if err != nil {
 		if errors.Is(err, ErrInvalidPaymentAmount) {

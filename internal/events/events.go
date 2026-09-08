@@ -16,12 +16,14 @@ const (
 
 // OrderCreatedEvent é emitido quando um pedido é criado com sucesso e aguarda processamento de pagamento.
 type OrderCreatedEvent struct {
-	SagaID      uuid.UUID `json:"saga_id"`
-	OrderID     uuid.UUID `json:"order_id"`
-	ClientID    uuid.UUID `json:"client_id"`
-	TotalAmount float64   `json:"total_amount"`
-	Status      string    `json:"status"`
-	CreatedAt   time.Time `json:"created_at"`
+	SagaID            uuid.UUID `json:"saga_id"`
+	OrderID           uuid.UUID `json:"order_id"`
+	ClientID          uuid.UUID `json:"client_id"`
+	TotalAmount       float64   `json:"total_amount"`
+	Status            string    `json:"status"`
+	PaymentMethod     string    `json:"payment_method,omitempty"`
+	SimulationOutcome string    `json:"simulation_outcome,omitempty"`
+	CreatedAt         time.Time `json:"created_at"`
 }
 
 // PaymentProcessedEvent é emitido quando o serviço de pagamentos finaliza a tentativa de cobrança com sucesso.

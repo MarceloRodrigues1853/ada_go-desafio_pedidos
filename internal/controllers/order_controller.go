@@ -8,6 +8,7 @@ import (
 
 	"pedidos/internal/domain"
 	"pedidos/internal/domain/order"
+	"pedidos/internal/payments"
 	"pedidos/internal/repository"
 	"pedidos/internal/service"
 
@@ -33,8 +34,10 @@ func NewOrderController(service OrderServiceInterface) *OrderController {
 func (c *OrderController) Create(w http.ResponseWriter, r *http.Request) {
 	// 1. Estrutura temporária para decodificar o payload JSON vindo da requisição
 	var input struct {
-		ClienteID string `json:"cliente_id"`
-		Itens     []struct {
+		ClienteID         string `json:"cliente_id"`
+		PaymentMethod     string `json:"payment_method"`
+		SimulationOutcome string `json:"simulation_outcome"`
+		Itens             []struct {
 			ProdutoID     string  `json:"produto_id"`
 			Quantidade    int32   `json:"quantidade"`
 			PrecoUnitario float64 `json:"preco_unitario"`
@@ -61,7 +64,10 @@ func (c *OrderController) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 4. Executa o caso de uso de criação no Service
-	pedidoSalvo, err := c.service.Create(r.Context(), clienteUUID, itensParaSalvar)
+	pedidoSalvo, err := c.service.CreateWithPayment(r.Context(), clienteUUID, itensParaSalvar, service.PaymentSelection{
+		Method:            payments.PaymentMethod(input.PaymentMethod),
+		SimulationOutcome: payments.PaymentOutcome(input.SimulationOutcome),
+	})
 	if err != nil {
 		writeOrderError(w, err)
 		return
@@ -174,6 +180,8 @@ func writeOrderError(w http.ResponseWriter, err error) {
 	case errors.Is(err, repository.ErrNotFound):
 		http.Error(w, "Pedido não encontrado", http.StatusNotFound)
 	case errors.Is(err, domain.ErrQuantidadeInvalida), errors.Is(err, order.ErrInvalidQuantity), errors.Is(err, order.ErrEmptyOrder):
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	case errors.Is(err, payments.ErrInvalidPaymentMethod), errors.Is(err, payments.ErrInvalidPaymentOutcome):
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	case errors.Is(err, domain.ErrEstoqueInsuficiente), errors.Is(err, order.ErrCannotCancelPaidOrder), errors.Is(err, order.ErrCannotCancelOrder), errors.Is(err, order.ErrCannotPayOrder):
 		http.Error(w, err.Error(), http.StatusConflict)

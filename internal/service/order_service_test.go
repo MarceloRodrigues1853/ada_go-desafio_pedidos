@@ -2,11 +2,13 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"pedidos/internal/domain/order"
 	"pedidos/internal/events"
+	"pedidos/internal/payments"
 	"pedidos/internal/repository"
 	"pedidos/internal/service"
 
@@ -21,6 +23,26 @@ type mockOrderRepo struct {
 	txErr       error
 	returnedQty int
 	returnedPID string
+}
+
+func TestOrderServiceRejectsInvalidPaymentSelectionBeforePersistence(t *testing.T) {
+	svc := service.NewOrderService(nil, nil, nil, nil)
+
+	_, err := svc.CreateWithPayment(context.Background(), uuid.New(), nil, service.PaymentSelection{
+		Method:            payments.PaymentMethod("CASH"),
+		SimulationOutcome: payments.PaymentOutcomeApproved,
+	})
+	if !errors.Is(err, payments.ErrInvalidPaymentMethod) {
+		t.Fatalf("erro = %v; esperado %v", err, payments.ErrInvalidPaymentMethod)
+	}
+
+	_, err = svc.CreateWithPayment(context.Background(), uuid.New(), nil, service.PaymentSelection{
+		Method:            payments.PaymentMethodPix,
+		SimulationOutcome: payments.PaymentOutcome("UNKNOWN"),
+	})
+	if !errors.Is(err, payments.ErrInvalidPaymentOutcome) {
+		t.Fatalf("erro = %v; esperado %v", err, payments.ErrInvalidPaymentOutcome)
+	}
 }
 
 func (m *mockOrderRepo) GetByID(ctx context.Context, id uuid.UUID) (*repository.OrderRecord, error) {

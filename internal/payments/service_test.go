@@ -56,12 +56,10 @@ func TestPaymentServicePublishesProcessedWhenGatewayApproves(t *testing.T) {
 
 func TestPaymentServicePublishesFailedWhenGatewayDeclines(t *testing.T) {
 	publisher := &recordingPublisher{}
-	service := NewPaymentServiceWithGateway(
-		publisher,
-		NewFakePaymentGateway(PaymentOutcomeDeclined, "saldo insuficiente simulado"),
-		PaymentMethodBoleto,
-	)
+	service := NewPaymentService(publisher)
 	event := newOrderCreatedEvent(220)
+	event.PaymentMethod = string(PaymentMethodBoleto)
+	event.SimulationOutcome = string(PaymentOutcomeDeclined)
 
 	result, err := service.ProcessPayment(context.Background(), event)
 	if err != nil {
@@ -74,8 +72,8 @@ func TestPaymentServicePublishesFailedWhenGatewayDeclines(t *testing.T) {
 	if !ok {
 		t.Fatalf("resultado = %T; esperado *events.PaymentFailedEvent", result)
 	}
-	if failed.Reason != "saldo insuficiente simulado" {
-		t.Errorf("motivo = %q; esperado motivo do gateway", failed.Reason)
+	if failed.Reason != "Pagamento recusado pelo gateway" {
+		t.Errorf("motivo = %q; esperado motivo padrão da recusa", failed.Reason)
 	}
 }
 

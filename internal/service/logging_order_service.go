@@ -47,8 +47,13 @@ func (s *LoggingOrderService) Pay(ctx context.Context, pedidoID uuid.UUID) error
 
 // Create implementa o método Create do OrderServiceInterface
 func (s *LoggingOrderService) Create(ctx context.Context, clienteID uuid.UUID, itens []OrderItemInput) (*OrderOutput, error) {
+	return s.CreateWithPayment(ctx, clienteID, itens, PaymentSelection{})
+}
+
+// CreateWithPayment registra a criação com a seleção do simulador.
+func (s *LoggingOrderService) CreateWithPayment(ctx context.Context, clienteID uuid.UUID, itens []OrderItemInput, payment PaymentSelection) (*OrderOutput, error) {
 	start := time.Now()
-	pedido, err := s.inner.Create(ctx, clienteID, itens)
+	pedido, err := s.inner.CreateWithPayment(ctx, clienteID, itens, payment)
 	if err != nil {
 		s.logger.Warn("create failed",
 			"cliente_id", clienteID,
@@ -60,6 +65,8 @@ func (s *LoggingOrderService) Create(ctx context.Context, clienteID uuid.UUID, i
 	s.logger.Info("create ok",
 		"pedido_id", pedido.ID,
 		"cliente_id", clienteID,
+		"payment_method", payment.Method,
+		"simulation_outcome", payment.SimulationOutcome,
 		"duration_ms", time.Since(start).Milliseconds())
 	return pedido, nil
 }
