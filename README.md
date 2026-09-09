@@ -23,7 +23,7 @@ demonstração, abra também
 O painel reúne os indicadores de pedidos, pagamentos, clientes e estoque, além
 dos pedidos mais recentes e das etapas da Saga.
 
-![Visão geral do painel operacional](assets/readme/01-visao-geral-operacional.png)
+![Visão geral do painel operacional](assets/readme/03-tutor-rag-evidencias-validas.png)
 
 <details>
 <summary>Ver criação e acompanhamento de pedidos</summary>
