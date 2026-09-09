@@ -22,6 +22,41 @@ garantia universal e deve ser recalibrado com mais perguntas representativas.
 ao CrewAI. `demo_rag.py` oferece uma demonstração direta no terminal e não
 executa a auditoria nem altera `DIAGNOSTICO.md`.
 
+## API HTTP para integração
+
+`rag_api.py` expõe somente a recuperação documental necessária para uma futura
+tela do tutor:
+
+- `GET /health`: confirma que o processo HTTP está ativo sem indexar documentos;
+- `POST /ask`: recebe `{"question":"..."}` e devolve evidências estruturadas;
+- cada fonte contém arquivo, posição, similaridade e conteúdo;
+- a resposta também informa threshold e totais de documentos e trechos;
+- uma pergunta vazia retorna ausência de evidência sem chamar embeddings.
+
+A API usa diretamente `LocalRAG`. O fluxo LangGraph continua disponível como
+demonstração separada, mas não é necessário na fronteira HTTP porque não altera
+ranking, threshold ou qualidade das evidências.
+
+Exemplo de resposta com evidência:
+
+```json
+{
+  "answer": "Fonte: README.md ...",
+  "has_evidence": true,
+  "sources": [
+    {
+      "file": "README.md",
+      "position": 1,
+      "similarity": 0.741,
+      "content": "trecho recuperado"
+    }
+  ],
+  "threshold": 0.65,
+  "documents_indexed": 3,
+  "chunks_indexed": 12
+}
+```
+
 ## Arquitetura com LangGraph
 
 `langgraph_rag.py` adiciona uma segunda forma de execução. LangGraph orquestra
@@ -72,6 +107,12 @@ A allowlist aceita exclusivamente:
   estiver no ambiente; o RAG nunca indexa ou exibe o `.env` nem imprime a chave;
 - o índice existe somente em memória e não grava documentos ou vetores;
 - a demonstração funciona em modo somente leitura.
+- a API aceita corpo de até 4 KiB e perguntas de até 500 caracteres;
+- origens web precisam estar explicitamente em `RAG_CORS_ALLOWED_ORIGINS`;
+- uma origem rejeitada recebe `403` antes de qualquer chamada de embedding;
+- `rag_api.py` usa `GOOGLE_API_KEY` apenas pelo ambiente e nunca lê `.env`;
+- a API não importa o CrewAI, não expõe as ferramentas do agente auditor, não
+  executa comandos e não permite escolher caminhos de arquivos.
 
 ## Executar os testes
 
@@ -82,6 +123,7 @@ cd /c/Users/marce/projetcs/ada/go-backend/modulo-01/desafio-pedidos
 source .venv/Scripts/activate
 python -m unittest -v test_rag_tutor.py
 python -m unittest -v test_langgraph_rag.py
+python -m unittest -v test_rag_api.py
 ```
 
 Se `.venv` não funcionar:
@@ -95,6 +137,7 @@ Se o comando `python` não estiver disponível:
 ```bash
 py -3 -m unittest -v test_rag_tutor.py
 py -3 -m unittest -v test_langgraph_rag.py
+py -3 -m unittest -v test_rag_api.py
 ```
 
 Os testes usam embeddings falsos e não acessam o Gemini.

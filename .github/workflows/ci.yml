@@ -49,6 +49,9 @@ jobs:
       - name: Test LangGraph orchestration
         run: python -m unittest -v test_langgraph_rag.py
 
+      - name: Test RAG HTTP API
+        run: python -m unittest -v test_rag_api.py
+
   frontend:
     name: Frontend build and lint
     runs-on: ubuntu-latest
