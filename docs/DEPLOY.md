@@ -44,6 +44,7 @@ Crie um Blueprint apontando para este repositório. O `render.yaml` define:
 
 - `desafio-pedidos-api`, construído com `Dockerfile`;
 - `desafio-pedidos-payments`, construído com `Dockerfile.payments`;
+- `desafio-pedidos-rag`, construído com `Dockerfile.rag`;
 - região `ohio`, alinhada ao Neon e ao CloudAMQP;
 - health check `/health` nos dois serviços;
 - credenciais solicitadas no painel por meio de `sync: false`.
@@ -57,6 +58,8 @@ No primeiro deploy, informe:
 | API | `CORS_ALLOWED_ORIGINS` | URL HTTPS do frontend na Vercel |
 | Payments | `DB_URL` | A mesma URL PostgreSQL |
 | Payments | `RABBITMQ_URL` | A mesma URL AMQP |
+| RAG | `GOOGLE_API_KEY` | Chave Gemini, somente no ambiente do serviço |
+| RAG | `RAG_CORS_ALLOWED_ORIGINS` | URL HTTPS do frontend na Vercel |
 
 Não configure `PORT`: o Render fornece essa variável. No Payments ela tem
 precedência sobre `METRICS_PORT`.
@@ -67,6 +70,11 @@ uma substituição de produção para um Background Worker. Antes da demonstraç
 abra primeiro `https://SEU-PAYMENTS.onrender.com/health` e depois
 `https://SUA-API.onrender.com/health`; espere ambos responderem antes de criar
 o pedido. O processamento pode demorar durante o cold start.
+
+O serviço RAG também entra em suspensão e a primeira pergunta após o cold start
+pode demorar mais, pois o índice em memória é reconstruído com embeddings. Os
+três Web Services compartilham a franquia gratuita do workspace; esta topologia
+é destinada somente a portfólio e demonstração.
 
 Consulte <https://render.com/docs/free> e
 <https://render.com/docs/blueprint-spec> para os limites e campos atuais.

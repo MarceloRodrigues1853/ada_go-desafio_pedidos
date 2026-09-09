@@ -37,6 +37,12 @@ A API usa diretamente `LocalRAG`. O fluxo LangGraph continua disponível como
 demonstração separada, mas não é necessário na fronteira HTTP porque não altera
 ranking, threshold ou qualidade das evidências.
 
+Para publicação, `Dockerfile.rag` usa Python 3.12 e executa como usuário sem
+privilégios. Seu contexto é filtrado por `Dockerfile.rag.dockerignore`: entram
+na imagem somente o núcleo RAG, a API e os Markdown permitidos. Código Go,
+frontend, ambientes virtuais, `.env` e `.git` ficam fora da imagem. O serviço
+não precisa instalar CrewAI ou LangGraph.
+
 Exemplo de resposta com evidência:
 
 ```json
@@ -113,6 +119,8 @@ A allowlist aceita exclusivamente:
 - `rag_api.py` usa `GOOGLE_API_KEY` apenas pelo ambiente e nunca lê `.env`;
 - a API não importa o CrewAI, não expõe as ferramentas do agente auditor, não
   executa comandos e não permite escolher caminhos de arquivos.
+- a imagem de produção executa sem usuário root e contém somente os arquivos
+  necessários para a recuperação documental.
 
 ## Executar os testes
 

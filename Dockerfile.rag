@@ -1,0 +1,18 @@
+FROM python:3.12-alpine
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+RUN addgroup -S rag && adduser -S rag -G rag
+
+COPY --chown=rag:rag rag_api.py rag_tutor.py ./
+COPY --chown=rag:rag README.md DIAGNOSTICO.md ./
+COPY --chown=rag:rag docs ./docs
+
+USER rag
+
+EXPOSE 8081
+
+CMD ["python", "rag_api.py"]

@@ -299,6 +299,7 @@ langgraph_rag.py            orquestração do RAG
 .github/workflows/ci.yml    integração contínua
 render.yaml                 Blueprint da API e Payments no Render
 Dockerfile.payments         imagem do consumidor para o Render
+Dockerfile.rag              imagem mínima da API documental
 frontend/                   painel React, TypeScript e Vite
 ```
 
