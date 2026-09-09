@@ -23,7 +23,7 @@ demonstração, abra também
 O painel reúne os indicadores de pedidos, pagamentos, clientes e estoque, além
 dos pedidos mais recentes e das etapas da Saga.
 
-![Visão geral do painel operacional](assets/readme/01-visao-geral.png)
+![Visão geral do painel operacional](assets/readme/01-visao-geral-operacional.png)
 
 <details>
 <summary>Ver criação e acompanhamento de pedidos</summary>
@@ -45,7 +45,7 @@ e o resultado da simulação. O status final é controlado pela Saga assíncrona
 Uma pergunta relacionada ao projeto retorna até três trechos ordenados por
 similaridade, preservando arquivo de origem, posição e conteúdo recuperado.
 
-![Tutor RAG apresentando evidências da documentação](assets/readme/03-tutor-rag-evidencias.png)
+![Tutor RAG apresentando evidências da documentação](assets/readme/03-tutor-rag-evidencias-validas.png)
 
 </details>
 
@@ -58,6 +58,18 @@ Quando nenhum trecho atinge o limite mínimo, o tutor admite que não encontrou
 evidência suficiente em vez de apresentar uma resposta sem respaldo.
 
 ![Tutor RAG informando ausência de evidência](assets/readme/04-tutor-rag-sem-evidencia.png)
+
+</details>
+
+<details>
+<summary>Ver validação de pergunta vazia</summary>
+
+### Entrada obrigatória
+
+Uma consulta vazia é interrompida no frontend com uma mensagem clara, sem
+acionar desnecessariamente a API de embeddings.
+
+![Tutor RAG validando uma pergunta vazia](assets/readme/05-tutor-rag-pergunta-vazia.png)
 
 </details>
 
