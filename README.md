@@ -260,16 +260,15 @@ RabbitMQ em `http://localhost:15672`.
 
 ## Preparação para cloud
 
-O `render.yaml` prepara a API para um Render Web Service usando o Dockerfile e
-`/health`. No primeiro Blueprint, informe pelo painel:
+O protótipo está preparado para frontend na Vercel, PostgreSQL no Neon,
+RabbitMQ no CloudAMQP e dois Web Services no Render: API e Payments. O
+`render.yaml` mantém credenciais fora do repositório com `sync: false`, e os
+dois serviços expõem `/health`.
 
-- `DB_URL`: PostgreSQL externo, preferencialmente Neon;
-- `RABBITMQ_URL`: broker gerenciado;
-- `CORS_ALLOWED_ORIGINS`: URL HTTPS do frontend.
-
-Segredos usam `sync: false` e não ficam no repositório. O Render fornece `PORT`
-automaticamente. O frontend React/Vite já está em `frontend/`; sua publicação
-na Vercel será configurada depois que a API tiver uma URL pública.
+O TiDB não é usado porque esta aplicação depende do protocolo e das migrations
+do PostgreSQL. O roteiro completo, a ordem de configuração, os cuidados com
+segredos e as limitações dos planos gratuitos estão em
+[`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ## Estrutura relevante
 
@@ -282,17 +281,19 @@ internal/repository/        portas e persistência PostgreSQL
 internal/infra/             broker, logger e métricas
 migrations/                 migrations PostgreSQL
 docs/RAG.md                 documentação do RAG
+docs/DEPLOY.md              roteiro de publicação do protótipo
 rag_tutor.py                recuperação local
 langgraph_rag.py            orquestração do RAG
 .github/workflows/ci.yml    integração contínua
-render.yaml                 Blueprint da API no Render
+render.yaml                 Blueprint da API e Payments no Render
+Dockerfile.payments         imagem do consumidor para o Render
 frontend/                   painel React, TypeScript e Vite
 ```
 
 ## Próximas etapas
 
-- publicar o frontend na Vercel;
-- provisionar PostgreSQL no Neon;
-- publicar a API no Render;
-- definir hospedagem adequada para RabbitMQ e Payments;
+- provisionar Neon e CloudAMQP sem versionar credenciais;
+- publicar API e Payments pelo Blueprint do Render;
+- publicar o frontend na Vercel e configurar CORS;
+- executar o checklist de demonstração em cloud;
 - adicionar cache e avaliação sistemática dos embeddings.

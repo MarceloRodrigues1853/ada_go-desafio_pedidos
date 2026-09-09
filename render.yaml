@@ -13,3 +13,16 @@ services:
         sync: false
       - key: CORS_ALLOWED_ORIGINS
         sync: false
+
+  - type: web
+    name: desafio-pedidos-payments
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile.payments
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: DB_URL
+        sync: false
+      - key: RABBITMQ_URL
+        sync: false

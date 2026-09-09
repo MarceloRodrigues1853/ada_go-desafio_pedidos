@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
@@ -25,6 +26,28 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
+
+const defaultMetricsPort = "9091"
+
+func paymentsHTTPPort() string {
+	if port := os.Getenv("PORT"); port != "" {
+		return port
+	}
+	if port := os.Getenv("METRICS_PORT"); port != "" {
+		return port
+	}
+	return defaultMetricsPort
+}
+
+func paymentsHTTPHandler() http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+	return mux
+}
 
 func main() {
 	// 1. Configuração de Logs estruturados (JSON)
@@ -95,19 +118,15 @@ func main() {
 
 	logger.Info("Microsserviço de pagamentos escutando eventos", "topic", events.TopicOrderCreated)
 
-	// 5. Expõe o endpoint /metrics (Prometheus) em porta dedicada
-	metricsPort := os.Getenv("METRICS_PORT")
-	if metricsPort == "" {
-		metricsPort = "9091"
-	}
+	// 5. Expõe os endpoints HTTP de saúde e métricas. Em cloud, PORT tem
+	// precedência; localmente, METRICS_PORT preserva a configuração existente.
+	httpPort := paymentsHTTPPort()
 	go func() {
-		mux := http.NewServeMux()
-		mux.Handle("/metrics", promhttp.Handler())
-		if err := http.ListenAndServe(":"+metricsPort, mux); err != nil {
+		if err := http.ListenAndServe(":"+httpPort, paymentsHTTPHandler()); err != nil {
 			logger.Error("Erro ao expor métricas Prometheus", "erro", err.Error())
 		}
 	}()
-	logger.Info("Endpoint de métricas Prometheus ativo", "porta", metricsPort)
+	logger.Info("Endpoints HTTP de Payments ativos", "porta", httpPort)
 
 	// 6. Consome fila em background/loop
 	errChan := make(chan error, 1)
