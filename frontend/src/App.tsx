@@ -1,14 +1,15 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
-import { api, type ApiStatus, type Client, type CreateOrderInput, type Order, type PaymentMethod, type Product, type SimulationOutcome } from './api'
+import { api, ragApi, type ApiStatus, type Client, type CreateOrderInput, type Order, type PaymentMethod, type Product, type RAGResponse, type SimulationOutcome } from './api'
 import './App.css'
 
-type View = 'dashboard' | 'clientes' | 'produtos' | 'pedidos'
+type View = 'dashboard' | 'clientes' | 'produtos' | 'pedidos' | 'tutor'
 
 const navigation: { id: View; label: string; marker: string }[] = [
   { id: 'dashboard', label: 'Visão geral', marker: '01' },
   { id: 'clientes', label: 'Clientes', marker: '02' },
   { id: 'produtos', label: 'Produtos', marker: '03' },
   { id: 'pedidos', label: 'Pedidos', marker: '04' },
+  { id: 'tutor', label: 'Tutor RAG', marker: '05' },
 ]
 
 function formatDate(value: string) {
@@ -101,7 +102,7 @@ function App() {
       <main>
         <header className="topbar">
           <div><span className="eyebrow">OPERAÇÕES / {navigation.find((item) => item.id === view)?.label.toUpperCase()}</span><h1>{navigation.find((item) => item.id === view)?.label}</h1></div>
-          <button className="secondary" onClick={() => void refresh()} disabled={loading}>{loading ? 'Atualizando…' : 'Atualizar dados'}</button>
+          {view !== 'tutor' && <button className="secondary" onClick={() => void refresh()} disabled={loading}>{loading ? 'Atualizando…' : 'Atualizar dados'}</button>}
         </header>
 
         {feedback && <div className={`feedback ${feedback.tone}`} role="status">{feedback.message}</div>}
@@ -110,9 +111,66 @@ function App() {
         {view === 'clientes' && <ClientsView clients={clients} onCreate={(data) => mutate(() => api.clients.create(data), 'Cliente criado com sucesso.')} />}
         {view === 'produtos' && <ProductsView products={products} onCreate={(data) => mutate(() => api.products.create(data), 'Produto criado com sucesso.')} />}
         {view === 'pedidos' && <OrdersView orders={orders} clients={clients} products={products} onCreate={(data) => mutate(() => api.orders.create(data), data.simulation_outcome === 'APPROVED' ? 'Pedido criado. A aprovação será processada automaticamente pela Saga.' : 'Pedido criado. A recusa será processada automaticamente e o estoque devolvido.')} />}
+        {view === 'tutor' && <TutorView />}
       </main>
     </div>
   )
+}
+
+function TutorView() {
+  const [question, setQuestion] = useState('')
+  const [result, setResult] = useState<RAGResponse | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    const normalizedQuestion = question.trim()
+    if (!normalizedQuestion) {
+      setResult(null)
+      setError('Digite uma pergunta antes de consultar a documentação.')
+      return
+    }
+    try {
+      setLoading(true)
+      setError('')
+      setResult(await ragApi.ask(normalizedQuestion))
+    } catch (requestError) {
+      setResult(null)
+      setError(requestError instanceof Error ? requestError.message : 'Não foi possível consultar o Tutor RAG.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const examples = [
+    'Como funciona o fluxo de pagamento de um pedido?',
+    'Qual é a política de férias dos funcionários da empresa?',
+  ]
+
+  return <div className="tutor-layout">
+    <section className="panel tutor-query">
+      <span className="eyebrow">RECUPERAÇÃO DOCUMENTAL</span>
+      <h2>Consulte a documentação do projeto</h2>
+      <p>O tutor busca evidências em arquivos Markdown autorizados. As fontes ajudam na investigação, mas a implementação deve ser confirmada no código.</p>
+      <form onSubmit={(event) => void submit(event)}>
+        <label className="field"><span>Pergunta</span><textarea maxLength={500} rows={5} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ex.: Como funciona o fluxo de pagamento?" /></label>
+        <div className="query-footer"><small>{question.length}/500 caracteres</small><button className="primary tutor-submit" type="submit" disabled={loading}>{loading ? 'Consultando…' : 'Buscar evidências'}</button></div>
+      </form>
+      <div className="example-queries"><span>Experimente:</span>{examples.map((example) => <button type="button" onClick={() => { setQuestion(example); setError('') }} key={example}>{example}</button>)}</div>
+      <small className="endpoint-note">Serviço: {ragApi.url}</small>
+    </section>
+
+    <section className="panel tutor-results" aria-live="polite">
+      <div className="section-heading"><div><span className="eyebrow">RESULTADO</span><h2>Evidências recuperadas</h2></div></div>
+      {error && <div className="feedback error">{error}</div>}
+      {!error && !result && <Empty message="Faça uma pergunta para consultar as fontes indexadas." />}
+      {result && <>
+        <div className="rag-stats"><span>{result.documents_indexed} documentos</span><span>{result.chunks_indexed} trechos</span><span>limite {result.threshold.toFixed(2)}</span></div>
+        {!result.has_evidence ? <div className="no-evidence"><strong>Nenhuma evidência suficiente</strong><p>{result.answer}</p></div> : <div className="source-list">{result.sources.map((source, index) => <article className="source-card" key={`${source.file}-${source.position}-${index}`}><div className="source-meta"><strong>{source.file}</strong><span>Trecho {source.position}</span><span>Similaridade {source.similarity.toFixed(3)}</span></div><p>{source.content}</p></article>)}</div>}
+      </>}
+    </section>
+  </div>
 }
 
 function Dashboard({ orders, clients, stats, loading }: { orders: Order[]; clients: Client[]; stats: { pending: number; paid: number; canceled: number; lowStock: number }; loading: boolean }) {

@@ -273,9 +273,11 @@ RabbitMQ em `http://localhost:15672`.
 ## Deploy em cloud
 
 O protótipo está publicado com frontend na Vercel, PostgreSQL no Neon, RabbitMQ
-no CloudAMQP e dois Web Services no Render: API e Payments. O `render.yaml`
+no CloudAMQP e três Web Services no Render: API, Payments e RAG. O `render.yaml`
 mantém credenciais fora do repositório com `sync: false`, fixa os serviços em
-Ohio e configura `/health` nos dois processos.
+Ohio e configura `/health` nos três processos. A tela **Tutor RAG** usa
+`VITE_RAG_API_URL` para consultar o serviço documental sem expor a chave Gemini
+no navegador.
 
 O TiDB não é usado porque esta aplicação depende do protocolo e das migrations
 do PostgreSQL. O roteiro completo, a ordem de configuração, os cuidados com

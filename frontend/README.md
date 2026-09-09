@@ -15,6 +15,12 @@ As telas de clientes e produtos oferecem busca local. A listagem de pedidos é
 dividida em páginas de dez itens e atualizada automaticamente enquanto existir
 algum pedido com status `PENDING`.
 
+A tela **Tutor RAG** consulta a API documental separada. Ela exibe o arquivo de
+origem, a posição e a similaridade de cada trecho recuperado, além do threshold
+e dos totais indexados. Se nenhuma fonte atingir o limite, a interface informa
+explicitamente a ausência de evidência. A recuperação documental orienta a
+investigação; o comportamento real sempre deve ser confirmado no código.
+
 ## Configuração
 
 ```bash
@@ -25,6 +31,10 @@ npm run dev
 
 `VITE_API_URL` deve apontar para a API Go. O valor local padrão é
 `http://localhost:8080`.
+
+`VITE_RAG_API_URL` deve apontar para a API RAG. O valor local padrão é
+`http://localhost:8081`. Na Vercel, configure essa variável com a URL pública do
+serviço `desafio-pedidos-rag` no Render.
 
 ## Validação
 

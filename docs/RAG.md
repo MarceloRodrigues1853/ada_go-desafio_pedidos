@@ -24,8 +24,8 @@ executa a auditoria nem altera `DIAGNOSTICO.md`.
 
 ## API HTTP para integração
 
-`rag_api.py` expõe somente a recuperação documental necessária para uma futura
-tela do tutor:
+`rag_api.py` expõe somente a recuperação documental usada pela tela **Tutor
+RAG** do painel React:
 
 - `GET /health`: confirma que o processo HTTP está ativo sem indexar documentos;
 - `POST /ask`: recebe `{"question":"..."}` e devolve evidências estruturadas;
@@ -42,6 +42,12 @@ privilégios. Seu contexto é filtrado por `Dockerfile.rag.dockerignore`: entram
 na imagem somente o núcleo RAG, a API e os Markdown permitidos. Código Go,
 frontend, ambientes virtuais, `.env` e `.git` ficam fora da imagem. O serviço
 não precisa instalar CrewAI ou LangGraph.
+
+No frontend, `VITE_RAG_API_URL` aponta para esse serviço. A tela envia somente a
+pergunta, apresenta os totais do índice e preserva arquivo, posição,
+similaridade e conteúdo de cada fonte. Os dois exemplos disponíveis na
+interface demonstram tanto uma recuperação válida quanto a recusa de uma
+pergunta fora do domínio. Nenhuma chave Gemini é enviada ao navegador.
 
 Exemplo de resposta com evidência:
 

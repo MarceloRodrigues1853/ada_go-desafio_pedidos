@@ -32,10 +32,27 @@ export interface Order {
   created_at: string
 }
 
-const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8080').replace(/\/$/, '')
+export interface RAGSource {
+  file: string
+  position: number
+  similarity: number
+  content: string
+}
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
+export interface RAGResponse {
+  answer: string
+  has_evidence: boolean
+  sources: RAGSource[]
+  threshold: number
+  documents_indexed: number
+  chunks_indexed: number
+}
+
+const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8080').replace(/\/$/, '')
+const RAG_API_URL = (import.meta.env.VITE_RAG_API_URL || 'http://localhost:8081').replace(/\/$/, '')
+
+async function requestFrom<T>(baseUrl: string, path: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(`${baseUrl}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -51,6 +68,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
 }
+
+const request = <T>(path: string, options?: RequestInit) => requestFrom<T>(API_URL, path, options)
 
 export const api = {
   url: API_URL,
@@ -70,4 +89,13 @@ export const api = {
     create: (data: CreateOrderInput) =>
       request<Order>('/pedidos', { method: 'POST', body: JSON.stringify(data) }),
   },
+}
+
+export const ragApi = {
+  url: RAG_API_URL,
+  health: () => requestFrom<{ status: string }>(RAG_API_URL, '/health'),
+  ask: (question: string) => requestFrom<RAGResponse>(RAG_API_URL, '/ask', {
+    method: 'POST',
+    body: JSON.stringify({ question }),
+  }),
 }

@@ -68,8 +68,9 @@ td code { color: #b9c2ca; font-size: .72rem; }
 .form-panel > p { color: var(--muted); font-size: .78rem; margin: 8px 0 24px; }
 .field { display: grid; gap: 7px; margin-bottom: 16px; }
 .field > span { color: #b8c1c9; font-size: .74rem; }
-input, select { width: 100%; border: 1px solid var(--line-strong); background: #0d1115; color: var(--text); padding: 11px 12px; outline: none; border-radius: 0; }
-input:focus, select:focus { border-color: var(--cyan); }
+input, select, textarea { width: 100%; border: 1px solid var(--line-strong); background: #0d1115; color: var(--text); padding: 11px 12px; outline: none; border-radius: 0; }
+input:focus, select:focus, textarea:focus { border-color: var(--cyan); }
+textarea { resize: vertical; min-height: 120px; font: inherit; line-height: 1.55; }
 .field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .simulation-note { display: grid; gap: 4px; margin: 4px 0 12px; padding: 12px; border: 1px solid #315640; background: #122319; }
 .simulation-note.declined { border-color: #60363b; background: #241517; }
@@ -100,12 +101,33 @@ input:focus, select:focus { border-color: var(--cyan); }
 .empty { min-height: 160px; display: grid; place-content: center; text-align: center; color: var(--muted); }
 .empty span { color: var(--line-strong); font: 2rem 'DM Mono'; }
 .empty p { font-size: .8rem; }
+.tutor-layout { display: grid; grid-template-columns: minmax(300px, .8fr) minmax(0, 1.2fr); gap: 22px; align-items: start; }
+.tutor-query > p { color: var(--muted); font-size: .82rem; line-height: 1.65; margin: 10px 0 24px; max-width: 65ch; }
+.query-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.query-footer small, .endpoint-note { color: var(--muted); font: .66rem 'DM Mono'; }
+.tutor-submit { width: auto; min-width: 180px; margin: 0; }
+.example-queries { border-top: 1px solid var(--line); display: grid; gap: 8px; margin-top: 22px; padding-top: 18px; }
+.example-queries > span { color: var(--muted); font-size: .72rem; }
+.example-queries button { color: #b8c1c9; background: transparent; border: 1px solid var(--line); padding: 9px 11px; text-align: left; font-size: .74rem; }
+.example-queries button:hover { color: var(--cyan); border-color: var(--cyan); }
+.endpoint-note { display: block; overflow-wrap: anywhere; margin-top: 18px; }
+.rag-stats { display: flex; flex-wrap: wrap; gap: 8px; margin: -4px 0 18px; }
+.rag-stats span { border: 1px solid var(--line); color: var(--muted); padding: 6px 8px; font: .64rem 'DM Mono'; }
+.source-list { display: grid; gap: 12px; }
+.source-card { border: 1px solid var(--line); background: #0d1216; padding: 16px; }
+.source-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; border-bottom: 1px solid var(--line); padding-bottom: 11px; }
+.source-meta strong { color: var(--cyan); font: .72rem 'DM Mono'; margin-right: auto; }
+.source-meta span { color: var(--muted); font: .63rem 'DM Mono'; }
+.source-card p { color: #c1c8ce; font-size: .78rem; line-height: 1.65; margin: 14px 0 0; white-space: pre-wrap; }
+.no-evidence { border: 1px solid #6a532e; background: #211b11; padding: 18px; }
+.no-evidence strong { color: var(--amber); font-size: .82rem; }
+.no-evidence p { color: #c8b995; font-size: .78rem; margin: 8px 0 0; }
 
 @media (max-width: 1050px) {
   .metrics-grid { grid-template-columns: repeat(2, 1fr); }
   .metric:nth-child(2) { border-right: 0; }
   .metric:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
-  .split-panel, .content-grid { grid-template-columns: 1fr; }
+  .split-panel, .content-grid, .tutor-layout { grid-template-columns: 1fr; }
   .saga-rail { border-left: 0; border-top: 1px solid var(--line); }
   .form-panel { position: static; }
 }
@@ -127,4 +149,6 @@ input:focus, select:focus { border-color: var(--cyan); }
   .product-grid { grid-template-columns: 1fr; }
   .section-heading { align-items: start; gap: 12px; }
   .live-status { max-width: 120px; text-align: right; }
+  .query-footer { align-items: stretch; flex-direction: column; }
+  .tutor-submit { width: 100%; }
 }
