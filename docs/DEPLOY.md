@@ -90,6 +90,12 @@ Referência: <https://vercel.com/docs/frameworks/frontend/vite>.
 
 ## Checklist da demonstração
 
+Ambiente publicado e validado em 9 de setembro de 2026:
+
+- frontend: <https://frontend-phi-ten-75.vercel.app>;
+- API: <https://desafio-pedidos-api.onrender.com>;
+- Payments: <https://desafio-pedidos-payments.onrender.com>.
+
 1. Confirmar que as migrations foram aplicadas no Neon.
 2. Abrir `/health` do Payments e aguardar `{"status":"ok"}`.
 3. Abrir `/health` da API e aguardar resposta saudável.

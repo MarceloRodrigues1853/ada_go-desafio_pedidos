@@ -6,6 +6,16 @@ Backend de pedidos desenvolvido em Go para demonstrar DDD, Clean Architecture,
 PostgreSQL, mensageria assíncrona, Saga, observabilidade e um agente tutor com
 RAG e LangGraph.
 
+## Demonstração online
+
+- Painel: <https://frontend-phi-ten-75.vercel.app>
+- Saúde da API: <https://desafio-pedidos-api.onrender.com/health>
+
+O ambiente usa planos gratuitos. API e Payments podem levar cerca de um minuto
+para despertar após um período sem acesso. Antes de criar um pedido na
+demonstração, abra também
+<https://desafio-pedidos-payments.onrender.com/health> e aguarde `{"status":"ok"}`.
+
 ## Funcionalidades
 
 - cadastro e consulta de clientes e produtos;
@@ -260,12 +270,12 @@ Detalhes, segurança e limitações estão em [`docs/RAG.md`](docs/RAG.md).
 O Prometheus local fica disponível em `http://localhost:9090` e o painel do
 RabbitMQ em `http://localhost:15672`.
 
-## Preparação para cloud
+## Deploy em cloud
 
-O protótipo está preparado para frontend na Vercel, PostgreSQL no Neon,
-RabbitMQ no CloudAMQP e dois Web Services no Render: API e Payments. O
-`render.yaml` mantém credenciais fora do repositório com `sync: false`, e os
-dois serviços expõem `/health`.
+O protótipo está publicado com frontend na Vercel, PostgreSQL no Neon, RabbitMQ
+no CloudAMQP e dois Web Services no Render: API e Payments. O `render.yaml`
+mantém credenciais fora do repositório com `sync: false`, fixa os serviços em
+Ohio e configura `/health` nos dois processos.
 
 O TiDB não é usado porque esta aplicação depende do protocolo e das migrations
 do PostgreSQL. O roteiro completo, a ordem de configuração, os cuidados com
@@ -294,8 +304,7 @@ frontend/                   painel React, TypeScript e Vite
 
 ## Próximas etapas
 
-- provisionar Neon e CloudAMQP sem versionar credenciais;
-- publicar API e Payments pelo Blueprint do Render;
-- publicar o frontend na Vercel e configurar CORS;
-- executar o checklist de demonstração em cloud;
 - adicionar cache e avaliação sistemática dos embeddings.
+- adicionar autenticação e autorização para um cenário além da demonstração;
+- automatizar um teste ponta a ponta da Saga em ambiente isolado;
+- definir uma hospedagem permanente para o consumidor antes de uso produtivo.
