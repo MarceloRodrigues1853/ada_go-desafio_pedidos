@@ -18,12 +18,29 @@ demonstração, abra também
 
 ## Interface
 
+### Demonstração em movimento
+
+O fluxo abaixo acompanha a criação de um pedido com pagamento fictício por Pix,
+o processamento assíncrono e a confirmação final pela Saga.
+
+![Demonstração do fluxo de criação e pagamento de um pedido](assets/readme/demo-fluxo-pedido.gif)
+
+<details>
+<summary>Ver demonstração do Tutor RAG</summary>
+
+O tutor recupera evidências para uma pergunta do domínio e recusa responder
+quando a documentação indexada não oferece suporte suficiente.
+
+![Demonstração da recuperação e da ausência de evidência no Tutor RAG](assets/readme/demo-tutor-rag.gif)
+
+</details>
+
 ### Visão geral operacional
 
 O painel reúne os indicadores de pedidos, pagamentos, clientes e estoque, além
 dos pedidos mais recentes e das etapas da Saga.
 
-![Visão geral do painel operacional](assets/readme/03-tutor-rag-evidencias-validas.png)
+![Visão geral do painel operacional](assets/readme/01-visao-geral-operacional.png)
 
 <details>
 <summary>Ver criação e acompanhamento de pedidos</summary>
