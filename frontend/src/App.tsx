@@ -24,6 +24,21 @@ function shortId(value: string) {
   return value.length > 13 ? `${value.slice(0, 8)}…` : value
 }
 
+function evidenceLines(content: string) {
+  return content
+    .replace(/```[\w-]*/g, '')
+    .replace(/\s+(#{1,6}\s+)/g, '\n$1')
+    .replace(/\s+-\s+/g, '\n- ')
+    .replace(/\s+(\d+\.)\s+/g, '\n$1 ')
+    .split('\n')
+    .map((line) => ({
+      text: line.replace(/^#{1,6}\s*/, '').replace(/^[-*]\s*/, '').replace(/`/g, '').replace(/\*\*/g, '').trim(),
+      listItem: /^[-*]\s/.test(line.trim()) || /^\d+\.\s/.test(line.trim()),
+      heading: /^#{1,6}\s/.test(line.trim()),
+    }))
+    .filter((line) => line.text)
+}
+
 function App() {
   const [view, setView] = useState<View>('dashboard')
   const [clients, setClients] = useState<Client[]>([])
@@ -167,7 +182,16 @@ function TutorView() {
       {!error && !result && <Empty message="Faça uma pergunta para consultar as fontes indexadas." />}
       {result && <>
         <div className="rag-stats"><span>{result.documents_indexed} documentos</span><span>{result.chunks_indexed} trechos</span><span>limite {result.threshold.toFixed(2)}</span></div>
-        {!result.has_evidence ? <div className="no-evidence"><strong>Nenhuma evidência suficiente</strong><p>{result.answer}</p></div> : <div className="source-list">{result.sources.map((source, index) => <article className="source-card" key={`${source.file}-${source.position}-${index}`}><div className="source-meta"><strong>{source.file}</strong><span>Trecho {source.position}</span><span>Similaridade {source.similarity.toFixed(3)}</span></div><p>{source.content}</p></article>)}</div>}
+        {!result.has_evidence ? <div className="no-evidence"><strong>Nenhuma evidência suficiente</strong><p>{result.answer}</p></div> : <div className="source-list">
+          <div className="evidence-intro"><strong>{result.sources.length} {result.sources.length === 1 ? 'fonte encontrada' : 'fontes encontradas'}</strong><span>Ordenadas por proximidade com a pergunta</span></div>
+          {result.sources.map((source, index) => <article className="source-card" key={`${source.file}-${source.position}-${index}`}>
+            <div className="source-card-heading"><span className="source-rank">{String(index + 1).padStart(2, '0')}</span><div><small>ARQUIVO DE ORIGEM</small><strong>{source.file}</strong></div><div className="similarity-block"><small>SIMILARIDADE</small><strong>{source.similarity.toFixed(3)}</strong></div></div>
+            <div className="similarity-track" aria-label={`Similaridade ${source.similarity.toFixed(3)}`}><span style={{ width: `${Math.max(0, Math.min(100, source.similarity * 100))}%` }} /></div>
+            <div className="source-position"><span>Trecho {source.position}</span><span>Acima do limite de {result.threshold.toFixed(2)}</span></div>
+            <div className="evidence-content">{evidenceLines(source.content).map((line, lineIndex) => <div className={`${line.heading ? 'evidence-heading' : ''} ${line.listItem ? 'evidence-list-item' : ''}`} key={`${lineIndex}-${line.text.slice(0, 20)}`}>{line.listItem && <span aria-hidden="true">→</span>}<p>{line.text}</p></div>)}</div>
+          </article>)}
+          <p className="similarity-help"><strong>Como interpretar:</strong> valores maiores indicam maior proximidade textual com a pergunta. Similaridade não confirma que a documentação esteja atualizada; valide a implementação no código.</p>
+        </div>}
       </>}
     </section>
   </div>
