@@ -134,7 +134,9 @@ O painel fica em `http://localhost:5173` e usa `VITE_API_URL` para localizar a
 API. Ele oferece visão geral, estado da API, cadastro e listagem de clientes e
 produtos, criação de pedidos e simulação controlada de pagamentos por cartão,
 Pix ou boleto. As listas possuem busca local, os pedidos são paginados e a tela
-é atualizada automaticamente enquanto houver processamento pendente.
+é atualizada automaticamente enquanto houver processamento pendente. O
+resultado escolhido na criação é processado pela Saga, sem uma segunda ação
+manual de pagar ou cancelar no painel.
 
 Ou suba todos os serviços:
 

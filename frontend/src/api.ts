@@ -69,7 +69,5 @@ export const api = {
     list: () => request<Order[]>('/pedidos?limit=100&offset=0'),
     create: (data: CreateOrderInput) =>
       request<Order>('/pedidos', { method: 'POST', body: JSON.stringify(data) }),
-    pay: (id: string) => request<{ mensagem: string }>(`/pedidos/${id}/pagar`, { method: 'POST' }),
-    cancel: (id: string) => request<{ mensagem: string }>(`/pedidos/${id}/cancelar`, { method: 'POST' }),
   },
 }
