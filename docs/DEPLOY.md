@@ -44,6 +44,7 @@ Crie um Blueprint apontando para este repositório. O `render.yaml` define:
 
 - `desafio-pedidos-api`, construído com `Dockerfile`;
 - `desafio-pedidos-payments`, construído com `Dockerfile.payments`;
+- região `ohio`, alinhada ao Neon e ao CloudAMQP;
 - health check `/health` nos dois serviços;
 - credenciais solicitadas no painel por meio de `sync: false`.
 

@@ -3,6 +3,7 @@ services:
     name: desafio-pedidos-api
     runtime: docker
     plan: free
+    region: ohio
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /health
@@ -18,6 +19,7 @@ services:
     name: desafio-pedidos-payments
     runtime: docker
     plan: free
+    region: ohio
     dockerfilePath: ./Dockerfile.payments
     dockerContext: .
     healthCheckPath: /health
