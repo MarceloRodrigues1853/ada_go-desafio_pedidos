@@ -6,6 +6,10 @@ Na criação de pedidos, o painel permite simular pagamentos por cartão, Pix ou
 boleto com aprovação ou recusa controlada. Nenhum dado bancário é coletado e
 nenhuma cobrança real é realizada.
 
+As telas de clientes e produtos oferecem busca local. A listagem de pedidos é
+dividida em páginas de dez itens e atualizada automaticamente enquanto existir
+algum pedido com status `PENDING`.
+
 ## Configuração
 
 ```bash

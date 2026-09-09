@@ -32,9 +32,11 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [feedback, setFeedback] = useState<{ tone: 'error' | 'success'; message: string } | null>(null)
 
-  const refresh = useCallback(async () => {
-    setLoading(true)
-    setFeedback(null)
+  const refresh = useCallback(async (silent = false) => {
+    if (!silent) {
+      setLoading(true)
+      setFeedback(null)
+    }
     const health = api.health().then(() => setApiStatus('online')).catch(() => setApiStatus('offline'))
     const [clientResult, productResult, orderResult] = await Promise.allSettled([
       api.clients.list(), api.products.list(), api.orders.list(), health,
@@ -42,16 +44,24 @@ function App() {
     if (clientResult.status === 'fulfilled') setClients(clientResult.value ?? [])
     if (productResult.status === 'fulfilled') setProducts(productResult.value ?? [])
     if (orderResult.status === 'fulfilled') setOrders(orderResult.value ?? [])
-    if ([clientResult, productResult, orderResult].some((result) => result.status === 'rejected')) {
+    if (!silent && [clientResult, productResult, orderResult].some((result) => result.status === 'rejected')) {
       setFeedback({ tone: 'error', message: 'Não foi possível carregar todos os dados. Confirme se a API está ativa.' })
     }
-    setLoading(false)
+    if (!silent) setLoading(false)
   }, [])
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => void refresh(), 0)
     return () => window.clearTimeout(initialLoad)
   }, [refresh])
+
+  const hasPendingOrders = orders.some((order) => order.status === 'PENDING')
+
+  useEffect(() => {
+    if (!hasPendingOrders || apiStatus !== 'online') return
+    const polling = window.setInterval(() => void refresh(true), 1500)
+    return () => window.clearInterval(polling)
+  }, [apiStatus, hasPendingOrders, refresh])
 
   const stats = useMemo(() => ({
     pending: orders.filter((order) => order.status === 'PENDING').length,
@@ -126,18 +136,29 @@ function Metric({ label, value, detail, accent, warning }: { label: string; valu
 
 function ClientsView({ clients, onCreate }: { clients: Client[]; onCreate: (data: { name: string; email: string; password: string }) => Promise<void> }) {
   const [form, setForm] = useState({ name: '', email: '', password: '' })
+  const [query, setQuery] = useState('')
+  const normalizedQuery = query.trim().toLocaleLowerCase('pt-BR')
+  const filteredClients = clients.filter((client) => `${client.name} ${client.email} ${client.id}`.toLocaleLowerCase('pt-BR').includes(normalizedQuery))
   async function submit(event: FormEvent) { event.preventDefault(); await onCreate(form); setForm({ name: '', email: '', password: '' }) }
-  return <div className="content-grid"><section className="panel"><div className="section-heading"><div><span className="eyebrow">BASE CADASTRAL</span><h2>{clients.length} clientes</h2></div></div><div className="data-list">{clients.length ? clients.map((client) => <article className="data-row" key={client.id}><div className="avatar">{client.name.slice(0, 2).toUpperCase()}</div><div><strong>{client.name}</strong><small>{client.email}</small></div><code>{shortId(client.id)}</code></article>) : <Empty message="Nenhum cliente cadastrado." />}</div></section><FormPanel title="Novo cliente" subtitle="Crie uma identidade para novos pedidos"><form onSubmit={(event) => void submit(event)}><Field label="Nome"><input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></Field><Field label="E-mail"><input required type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></Field><Field label="Senha"><input required type="password" minLength={6} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /></Field><button className="primary" type="submit">Cadastrar cliente</button></form></FormPanel></div>
+  return <div className="content-grid"><section className="panel"><div className="section-heading"><div><span className="eyebrow">BASE CADASTRAL</span><h2>{clients.length} clientes</h2></div></div><SearchField label="Buscar clientes" value={query} onChange={setQuery} placeholder="Nome, e-mail ou ID" resultCount={filteredClients.length} totalCount={clients.length} /><div className="data-list">{filteredClients.length ? filteredClients.map((client) => <article className="data-row" key={client.id}><div className="avatar">{client.name.slice(0, 2).toUpperCase()}</div><div><strong>{client.name}</strong><small>{client.email}</small></div><code>{shortId(client.id)}</code></article>) : <Empty message={clients.length ? "Nenhum cliente corresponde à busca." : "Nenhum cliente cadastrado."} />}</div></section><FormPanel title="Novo cliente" subtitle="Crie uma identidade para novos pedidos"><form onSubmit={(event) => void submit(event)}><Field label="Nome"><input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></Field><Field label="E-mail"><input required type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></Field><Field label="Senha"><input required type="password" minLength={6} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /></Field><button className="primary" type="submit">Cadastrar cliente</button></form></FormPanel></div>
 }
 
 function ProductsView({ products, onCreate }: { products: Product[]; onCreate: (data: Product) => Promise<void> }) {
   const [form, setForm] = useState({ id: '', nome: '', preco: '', estoque: '' })
+  const [query, setQuery] = useState('')
+  const normalizedQuery = query.trim().toLocaleLowerCase('pt-BR')
+  const filteredProducts = products.filter((product) => `${product.nome} ${product.id}`.toLocaleLowerCase('pt-BR').includes(normalizedQuery))
   async function submit(event: FormEvent) { event.preventDefault(); await onCreate({ id: form.id, nome: form.nome, preco: Number(form.preco), estoque: Number(form.estoque) }); setForm({ id: '', nome: '', preco: '', estoque: '' }) }
-  return <div className="content-grid"><section className="panel"><div className="section-heading"><div><span className="eyebrow">CATÁLOGO E ESTOQUE</span><h2>{products.length} produtos</h2></div></div><div className="product-grid">{products.length ? products.map((product) => <article className="product-card" key={product.id}><div><code>{product.id}</code><span className={product.estoque <= 5 ? 'stock low' : 'stock'}>{product.estoque} un.</span></div><h3>{product.nome}</h3><strong>{formatMoney(product.preco)}</strong></article>) : <Empty message="Nenhum produto cadastrado." />}</div></section><FormPanel title="Novo produto" subtitle="Cadastre preço e estoque inicial"><form onSubmit={(event) => void submit(event)}><Field label="SKU"><input required value={form.id} onChange={(event) => setForm({ ...form, id: event.target.value })} /></Field><Field label="Nome"><input required value={form.nome} onChange={(event) => setForm({ ...form, nome: event.target.value })} /></Field><div className="field-pair"><Field label="Preço"><input required type="number" min="0.01" step="0.01" value={form.preco} onChange={(event) => setForm({ ...form, preco: event.target.value })} /></Field><Field label="Estoque"><input required type="number" min="0" value={form.estoque} onChange={(event) => setForm({ ...form, estoque: event.target.value })} /></Field></div><button className="primary" type="submit">Cadastrar produto</button></form></FormPanel></div>
+  return <div className="content-grid"><section className="panel"><div className="section-heading"><div><span className="eyebrow">CATÁLOGO E ESTOQUE</span><h2>{products.length} produtos</h2></div></div><SearchField label="Buscar produtos" value={query} onChange={setQuery} placeholder="Nome ou SKU" resultCount={filteredProducts.length} totalCount={products.length} /><div className="product-grid">{filteredProducts.length ? filteredProducts.map((product) => <article className="product-card" key={product.id}><div><code>{product.id}</code><span className={product.estoque <= 5 ? 'stock low' : 'stock'}>{product.estoque} un.</span></div><h3>{product.nome}</h3><strong>{formatMoney(product.preco)}</strong></article>) : <Empty message={products.length ? "Nenhum produto corresponde à busca." : "Nenhum produto cadastrado."} />}</div></section><FormPanel title="Novo produto" subtitle="Cadastre preço e estoque inicial"><form onSubmit={(event) => void submit(event)}><Field label="SKU"><input required value={form.id} onChange={(event) => setForm({ ...form, id: event.target.value })} /></Field><Field label="Nome"><input required value={form.nome} onChange={(event) => setForm({ ...form, nome: event.target.value })} /></Field><div className="field-pair"><Field label="Preço"><input required type="number" min="0.01" step="0.01" value={form.preco} onChange={(event) => setForm({ ...form, preco: event.target.value })} /></Field><Field label="Estoque"><input required type="number" min="0" value={form.estoque} onChange={(event) => setForm({ ...form, estoque: event.target.value })} /></Field></div><button className="primary" type="submit">Cadastrar produto</button></form></FormPanel></div>
 }
 
 function OrdersView({ orders, clients, products, onCreate, onPay, onCancel }: { orders: Order[]; clients: Client[]; products: Product[]; onCreate: (data: CreateOrderInput) => Promise<void>; onPay: (id: string) => Promise<void>; onCancel: (id: string) => Promise<void> }) {
   const [form, setForm] = useState<{ clientId: string; productId: string; quantity: string; paymentMethod: PaymentMethod; simulationOutcome: SimulationOutcome }>({ clientId: '', productId: '', quantity: '1', paymentMethod: 'CARD', simulationOutcome: 'APPROVED' })
+  const [page, setPage] = useState(1)
+  const pageSize = 10
+  const pageCount = Math.max(1, Math.ceil(orders.length / pageSize))
+  const currentPage = Math.min(page, pageCount)
+  const visibleOrders = orders.slice((currentPage - 1) * pageSize, currentPage * pageSize)
   async function submit(event: FormEvent) {
     event.preventDefault()
     await onCreate({
@@ -148,7 +169,7 @@ function OrdersView({ orders, clients, products, onCreate, onPay, onCancel }: { 
     })
     setForm({ ...form, productId: '', quantity: '1' })
   }
-  return <div className="content-grid orders-layout"><section className="panel"><div className="section-heading"><div><span className="eyebrow">PROCESSAMENTO</span><h2>{orders.length} pedidos</h2></div></div><OrderTable orders={orders} onPay={onPay} onCancel={onCancel} /></section><FormPanel title="Novo pedido" subtitle="Reserve estoque e simule o pagamento"><form onSubmit={(event) => void submit(event)}><Field label="Cliente"><select required value={form.clientId} onChange={(event) => setForm({ ...form, clientId: event.target.value })}><option value="">Selecione</option>{clients.map((client) => <option value={client.id} key={client.id}>{client.name}</option>)}</select></Field><Field label="Produto"><select required value={form.productId} onChange={(event) => setForm({ ...form, productId: event.target.value })}><option value="">Selecione</option>{products.filter((product) => product.estoque > 0).map((product) => <option value={product.id} key={product.id}>{product.nome} · {product.estoque} un.</option>)}</select></Field><Field label="Quantidade"><input required type="number" min="1" value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value })} /></Field><Field label="Meio de pagamento"><select value={form.paymentMethod} onChange={(event) => setForm({ ...form, paymentMethod: event.target.value as PaymentMethod })}><option value="CARD">Cartão</option><option value="PIX">Pix</option><option value="BOLETO">Boleto</option></select></Field><Field label="Resultado da simulação"><select value={form.simulationOutcome} onChange={(event) => setForm({ ...form, simulationOutcome: event.target.value as SimulationOutcome })}><option value="APPROVED">Aprovar pagamento</option><option value="DECLINED">Recusar pagamento</option></select></Field><div className={`simulation-note ${form.simulationOutcome === 'DECLINED' ? 'declined' : 'approved'}`} role="status"><strong>Pagamento fictício</strong><span>{form.simulationOutcome === 'APPROVED' ? 'A Saga deverá concluir o pedido como PAID.' : 'A Saga deverá cancelar o pedido e devolver o estoque.'}</span></div><button className="primary" type="submit" disabled={!clients.length || !products.length}>{form.simulationOutcome === 'APPROVED' ? 'Criar e aprovar' : 'Criar e recusar'}</button></form></FormPanel></div>
+  return <div className="content-grid orders-layout"><section className="panel"><div className="section-heading"><div><span className="eyebrow">PROCESSAMENTO</span><h2>{orders.length} pedidos</h2></div>{orders.some((order) => order.status === 'PENDING') && <span className="live-status">Atualização automática ativa</span>}</div><OrderTable orders={visibleOrders} onPay={onPay} onCancel={onCancel} /><Pagination page={currentPage} pageCount={pageCount} onPageChange={setPage} /></section><FormPanel title="Novo pedido" subtitle="Reserve estoque e simule o pagamento"><form onSubmit={(event) => void submit(event)}><Field label="Cliente"><select required value={form.clientId} onChange={(event) => setForm({ ...form, clientId: event.target.value })}><option value="">Selecione</option>{clients.map((client) => <option value={client.id} key={client.id}>{client.name} · {shortId(client.id)}</option>)}</select></Field><Field label="Produto"><select required value={form.productId} onChange={(event) => setForm({ ...form, productId: event.target.value })}><option value="">Selecione</option>{products.filter((product) => product.estoque > 0).map((product) => <option value={product.id} key={product.id}>{product.nome} · {product.id} · {product.estoque} un.</option>)}</select></Field><Field label="Quantidade"><input required type="number" min="1" value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value })} /></Field><Field label="Meio de pagamento"><select value={form.paymentMethod} onChange={(event) => setForm({ ...form, paymentMethod: event.target.value as PaymentMethod })}><option value="CARD">Cartão</option><option value="PIX">Pix</option><option value="BOLETO">Boleto</option></select></Field><Field label="Resultado da simulação"><select value={form.simulationOutcome} onChange={(event) => setForm({ ...form, simulationOutcome: event.target.value as SimulationOutcome })}><option value="APPROVED">Aprovar pagamento</option><option value="DECLINED">Recusar pagamento</option></select></Field><div className={`simulation-note ${form.simulationOutcome === 'DECLINED' ? 'declined' : 'approved'}`} role="status"><strong>Pagamento fictício</strong><span>{form.simulationOutcome === 'APPROVED' ? 'A Saga deverá concluir o pedido como PAID.' : 'A Saga deverá cancelar o pedido e devolver o estoque.'}</span></div><button className="primary" type="submit" disabled={!clients.length || !products.length}>{form.simulationOutcome === 'APPROVED' ? 'Criar e aprovar' : 'Criar e recusar'}</button></form></FormPanel></div>
 }
 
 function OrderTable({ orders, compact, loading, onPay, onCancel }: { orders: Order[]; compact?: boolean; loading?: boolean; onPay?: (id: string) => Promise<void>; onCancel?: (id: string) => Promise<void> }) {
@@ -160,5 +181,14 @@ function OrderTable({ orders, compact, loading, onPay, onCancel }: { orders: Ord
 function FormPanel({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) { return <aside className="form-panel"><span className="eyebrow">AÇÃO RÁPIDA</span><h2>{title}</h2><p>{subtitle}</p>{children}</aside> }
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="field"><span>{label}</span>{children}</label> }
 function Empty({ message }: { message: string }) { return <div className="empty"><span>—</span><p>{message}</p></div> }
+
+function SearchField({ label, value, onChange, placeholder, resultCount, totalCount }: { label: string; value: string; onChange: (value: string) => void; placeholder: string; resultCount: number; totalCount: number }) {
+  return <div className="search-field"><label><span>{label}</span><input type="search" value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} /></label><small>{resultCount} de {totalCount}</small></div>
+}
+
+function Pagination({ page, pageCount, onPageChange }: { page: number; pageCount: number; onPageChange: (page: number) => void }) {
+  if (pageCount <= 1) return null
+  return <nav className="pagination" aria-label="Paginação dos pedidos"><button type="button" disabled={page === 1} onClick={() => onPageChange(page - 1)}>Anterior</button><span>Página {page} de {pageCount}</span><button type="button" disabled={page === pageCount} onClick={() => onPageChange(page + 1)}>Próxima</button></nav>
+}
 
 export default App

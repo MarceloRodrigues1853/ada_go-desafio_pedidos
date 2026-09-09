@@ -51,6 +51,7 @@ h3 { font-size: 1rem; margin-bottom: 24px; }
 .saga-step span { width: 28px; height: 28px; border: 1px solid var(--cyan); color: var(--cyan); display: grid; place-items: center; font: .68rem 'DM Mono'; }
 .saga-step p { color: var(--muted); font-size: .8rem; padding-top: 5px; }
 .section-heading { display: flex; justify-content: space-between; align-items: end; margin-bottom: 22px; }
+.live-status { color: var(--cyan); font: 500 .68rem 'DM Mono'; }
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: .8rem; }
 th { color: var(--muted); text-align: left; font: 500 .63rem 'DM Mono'; letter-spacing: .08em; text-transform: uppercase; border-bottom: 1px solid var(--line); padding: 10px 12px; }
@@ -74,6 +75,13 @@ input:focus, select:focus { border-color: var(--cyan); }
 .simulation-note.declined { border-color: #60363b; background: #241517; }
 .simulation-note strong { color: var(--text); font-size: .78rem; }
 .simulation-note span { color: var(--muted); font-size: .72rem; line-height: 1.5; }
+.search-field { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: end; margin-bottom: 18px; }
+.search-field label { display: grid; gap: 7px; }
+.search-field label span { color: #b8c1c9; font-size: .74rem; }
+.search-field small { color: var(--muted); font: .68rem 'DM Mono'; padding-bottom: 12px; white-space: nowrap; }
+.pagination { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 18px; }
+.pagination button { border: 1px solid var(--line-strong); color: var(--text); background: transparent; padding: 8px 12px; }
+.pagination span { color: var(--muted); font: .68rem 'DM Mono'; }
 .data-list { display: grid; }
 .data-row { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--line); }
 .avatar { width: 38px; height: 38px; display: grid; place-items: center; background: var(--cyan-dark); color: var(--cyan); font: .7rem 'DM Mono'; }
@@ -117,4 +125,6 @@ input:focus, select:focus { border-color: var(--cyan); }
   .metric { min-height: 138px; border-right: 0; border-bottom: 1px solid var(--line); }
   .metric:last-child { border-bottom: 0; }
   .product-grid { grid-template-columns: 1fr; }
+  .section-heading { align-items: start; gap: 12px; }
+  .live-status { max-width: 120px; text-align: right; }
 }
