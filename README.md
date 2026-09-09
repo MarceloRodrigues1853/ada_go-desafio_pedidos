@@ -16,6 +16,51 @@ para despertar após um período sem acesso. Antes de criar um pedido na
 demonstração, abra também
 <https://desafio-pedidos-payments.onrender.com/health> e aguarde `{"status":"ok"}`.
 
+## Interface
+
+### Visão geral operacional
+
+O painel reúne os indicadores de pedidos, pagamentos, clientes e estoque, além
+dos pedidos mais recentes e das etapas da Saga.
+
+![Visão geral do painel operacional](assets/readme/01-visao-geral.png)
+
+<details>
+<summary>Ver criação e acompanhamento de pedidos</summary>
+
+### Fluxo de pedidos
+
+A interface permite selecionar cliente, produto, quantidade, meio de pagamento
+e o resultado da simulação. O status final é controlado pela Saga assíncrona.
+
+![Criação e acompanhamento de pedidos](assets/readme/02-fluxo-pedidos.png)
+
+</details>
+
+<details>
+<summary>Ver Tutor RAG com evidências</summary>
+
+### Recuperação documental
+
+Uma pergunta relacionada ao projeto retorna até três trechos ordenados por
+similaridade, preservando arquivo de origem, posição e conteúdo recuperado.
+
+![Tutor RAG apresentando evidências da documentação](assets/readme/03-tutor-rag-evidencias.png)
+
+</details>
+
+<details>
+<summary>Ver comportamento sem evidência suficiente</summary>
+
+### Recusa de resposta sem suporte documental
+
+Quando nenhum trecho atinge o limite mínimo, o tutor admite que não encontrou
+evidência suficiente em vez de apresentar uma resposta sem respaldo.
+
+![Tutor RAG informando ausência de evidência](assets/readme/04-tutor-rag-sem-evidencia.png)
+
+</details>
+
 ## Funcionalidades
 
 - cadastro e consulta de clientes e produtos;
