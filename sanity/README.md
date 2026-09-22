@@ -26,3 +26,22 @@ arquivos `.env`.
 O seed contém apenas fatos verificados diretamente no código. Os campos
 `codeSources` preservam os caminhos e linhas usados como evidência para facilitar
 revisões futuras; eles não concedem ao agente acesso de execução ao repositório.
+
+## Teste de divergência histórica
+
+`seed/historical-dlq-claim.ndjson` contém uma única afirmação marcada como
+`outdated`: o diagnóstico anterior recomendava retry e DLQ, enquanto o código
+atual envia mensagens rejeitadas sem requeue para a DLQ. A fonte histórica
+referencia a afirmação atual `claim-dlq-current`; não deve ser tratada como
+comportamento vigente.
+
+Para adicionar apenas esse documento ao dataset já existente, execute na pasta
+`sanity/` (com a sessão da CLI autenticada):
+
+```bash
+npx sanity datasets import seed/historical-dlq-claim.ndjson production
+```
+
+Não use `--replace` nem reimporte `initial-content.ndjson` neste passo. Depois,
+na Knowledge Base do painel Sanity, escolha **Check for changes** e confira se
+as entradas foram atualizadas antes de testar a pergunta no OpenCoach.
