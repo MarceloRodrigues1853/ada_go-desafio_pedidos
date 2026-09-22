@@ -39,9 +39,13 @@ Para adicionar apenas esse documento ao dataset já existente, execute na pasta
 `sanity/` (com a sessão da CLI autenticada):
 
 ```bash
-npx sanity datasets import seed/historical-dlq-claim.ndjson production
+npx sanity datasets import seed/historical-dlq-claim.ndjson --dataset production
 ```
 
 Não use `--replace` nem reimporte `initial-content.ndjson` neste passo. Depois,
-na Knowledge Base do painel Sanity, escolha **Check for changes** e confira se
-as entradas foram atualizadas antes de testar a pergunta no OpenCoach.
+na Knowledge Base do painel Sanity, escolha **Check for changes** para verificar
+as fontes e examine **Issues**. A verificação não reescreve as entradas por si
+só. Se as entradas ainda mostrarem a versão anterior e não houver uma issue
+aplicável, use **Settings > Rebuild knowledge base**, sabendo que isso regenera
+todas as entradas. Confira **Entries up to date** e a seção **Contexto histórico**
+da entrada sobre DLQ antes de perguntar ao OpenCoach.
