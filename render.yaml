@@ -42,3 +42,7 @@ services:
         sync: false
       - key: RAG_CORS_ALLOWED_ORIGINS
         sync: false
+      - key: SANITY_CONTEXT_MCP_URL
+        sync: false
+      - key: SANITY_CONTEXT_TOKEN
+        sync: false
