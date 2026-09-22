@@ -16,6 +16,7 @@ from rag_tutor import (
     NO_EVIDENCE,
     discover_markdown_files,
 )
+from open_coach import GeminiCoach, OpenCoachService, OpenCoachStepError, SanityContextRetriever
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -144,6 +145,13 @@ def make_handler(service: RAGQueryService, allowed_origins: frozenset[str]):
                 self._send_json(200, service.ask(question))
             except (json.JSONDecodeError, ValueError) as error:
                 self._send_json(400, {"error": str(error)})
+            except OpenCoachStepError as error:
+                response = {"error": "não foi possível consultar o OpenCoach", "stage": error.stage}
+                if error.provider_http_status is not None:
+                    response["provider_http_status"] = error.provider_http_status
+                if error.provider_status is not None:
+                    response["provider_status"] = error.provider_status
+                self._send_json(503, response)
             except Exception:
                 self._send_json(503, {"error": "não foi possível consultar o RAG"})
 
@@ -160,9 +168,26 @@ def main() -> int:
 
     allowed_origins = parse_allowed_origins(os.getenv("RAG_CORS_ALLOWED_ORIGINS", ""))
     port = int(os.getenv("PORT", str(DEFAULT_PORT)))
-    service = RAGQueryService(LocalRAG(PROJECT_ROOT, GeminiEmbedder(api_key)), PROJECT_ROOT)
+    sanity_endpoint = os.getenv("SANITY_CONTEXT_MCP_URL", "").strip()
+    sanity_token = os.getenv("SANITY_CONTEXT_TOKEN", "").strip()
+    if bool(sanity_endpoint) != bool(sanity_token):
+        raise RuntimeError(
+            "SANITY_CONTEXT_MCP_URL e SANITY_CONTEXT_TOKEN devem ser configuradas juntas"
+        )
+
+    if sanity_endpoint:
+        coach = GeminiCoach(api_key)
+        service = OpenCoachService(
+            SanityContextRetriever(sanity_endpoint, sanity_token, coach), coach
+        )
+        mode = "sanity-context"
+    else:
+        service = RAGQueryService(
+            LocalRAG(PROJECT_ROOT, GeminiEmbedder(api_key)), PROJECT_ROOT
+        )
+        mode = "local-rag"
     server = ThreadingHTTPServer(("0.0.0.0", port), make_handler(service, allowed_origins))
-    print(f"RAG API ativa na porta {port}")
+    print(f"OpenCoach ativo na porta {port} em modo {mode}")
     server.serve_forever()
     return 0
 

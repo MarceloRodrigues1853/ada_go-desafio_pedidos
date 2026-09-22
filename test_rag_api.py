@@ -7,6 +7,7 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
+from open_coach import GeminiRequestError, OpenCoachStepError
 from rag_api import (
     MAX_QUESTION_CHARS,
     RAGQueryService,
@@ -137,6 +138,54 @@ class RAGHTTPTests(unittest.TestCase):
         self.addCleanup(error.close)
         self.assertEqual(error.code, 403)
         self.assertEqual(self.embedder.calls, 0)
+
+    def test_open_coach_failure_reports_only_stage(self):
+        class FailingService:
+            def ask(self, question):
+                raise OpenCoachStepError("sanity_connect")
+
+        self.server.RequestHandlerClass = make_handler(
+            FailingService(), frozenset({"https://frontend.example.app"})
+        )
+
+        with self.assertRaises(HTTPError) as captured:
+            urlopen(self.request("https://frontend.example.app"), timeout=2)
+
+        error = captured.exception
+        self.addCleanup(error.close)
+        self.assertEqual(error.code, 503)
+        self.assertEqual(
+            json.load(error),
+            {"error": "não foi possível consultar o OpenCoach", "stage": "sanity_connect"},
+        )
+
+    def test_nested_gemini_failure_reports_safe_provider_status(self):
+        class FailingService:
+            def ask(self, question):
+                cause = ExceptionGroup(
+                    "mcp", [GeminiRequestError(429, "RESOURCE_EXHAUSTED")]
+                )
+                raise OpenCoachStepError("gemini_selection", cause) from cause
+
+        self.server.RequestHandlerClass = make_handler(
+            FailingService(), frozenset({"https://frontend.example.app"})
+        )
+
+        with self.assertRaises(HTTPError) as captured:
+            urlopen(self.request("https://frontend.example.app"), timeout=2)
+
+        error = captured.exception
+        self.addCleanup(error.close)
+        self.assertEqual(error.code, 503)
+        self.assertEqual(
+            json.load(error),
+            {
+                "error": "não foi possível consultar o OpenCoach",
+                "stage": "gemini_selection",
+                "provider_http_status": 429,
+                "provider_status": "RESOURCE_EXHAUSTED",
+            },
+        )
 
 
 if __name__ == "__main__":
