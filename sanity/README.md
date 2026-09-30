@@ -49,3 +49,21 @@ só. Se as entradas ainda mostrarem a versão anterior e não houver uma issue
 aplicável, use **Settings > Rebuild knowledge base**, sabendo que isso regenera
 todas as entradas. Confira **Entries up to date** e a seção **Contexto histórico**
 da entrada sobre DLQ antes de perguntar ao OpenCoach.
+
+## Validação das citações da entrada sobre DLQ
+
+Após reconstruir a Knowledge Base, confira as citações pelo cartão de origem;
+os números podem mudar entre versões da entrada. A decisão arquitetural
+`decision-dlq` documenta `messages_dlq_total` e o monitoramento das DLQs. A
+afirmação `claim-dlq-current` confirma a existência da DLX, das filas e da
+rejeição sem requeue, mas não descreve a métrica. A afirmação histórica
+`claim-dlq-historical-diagnostic` descreve apenas o estado anterior.
+
+Na revisão de 30/09/2026, a entrada gerada citou `claim-dlq-current` nas frases
+sobre a métrica e o monitoramento, apesar de instruções de reescrita apontarem
+para `decision-dlq`. A nota histórica citou a fonte histórica corretamente.
+Portanto, a resposta do OpenCoach sobre a existência da DLQ foi validada, mas
+a precisão dessas duas citações da entrada continua pendente. Não interprete
+**Entries up to date** como aprovação da correspondência entre afirmação e
+fonte. Evite repetir rebuilds sem uma mudança verificável na fonte ou no
+processo de geração.
