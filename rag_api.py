@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import os
 import threading
+import time
+from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from rag_tutor import (
     DEFAULT_MIN_SIMILARITY,
@@ -23,6 +25,32 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_PORT = 8081
 MAX_BODY_BYTES = 4096
 MAX_QUESTION_CHARS = 500
+MAX_ASK_REQUESTS_PER_MINUTE = 20
+
+
+class QuestionService(Protocol):
+    def ask(self, question: str) -> dict[str, Any]: ...
+
+
+class AskRateLimiter:
+    """Limite global por processo para chamadas que podem acessar provedores pagos."""
+
+    def __init__(self, limit: int = MAX_ASK_REQUESTS_PER_MINUTE, window: float = 60.0):
+        self.limit = limit
+        self.window = window
+        self._calls: deque[float] = deque()
+        self._lock = threading.Lock()
+
+    def allow(self) -> tuple[bool, int]:
+        now = time.monotonic()
+        with self._lock:
+            while self._calls and self._calls[0] <= now - self.window:
+                self._calls.popleft()
+            if len(self._calls) >= self.limit:
+                retry_after = max(1, int(self._calls[0] + self.window - now) + 1)
+                return False, retry_after
+            self._calls.append(now)
+            return True, 0
 
 
 def parse_allowed_origins(configured: str) -> frozenset[str]:
@@ -90,13 +118,23 @@ class RAGQueryService:
         }
 
 
-def make_handler(service: RAGQueryService, allowed_origins: frozenset[str]):
+def make_handler(
+    service: QuestionService,
+    allowed_origins: frozenset[str],
+    limiter: AskRateLimiter | None = None,
+):
+    limiter = limiter or AskRateLimiter()
+
     class RAGRequestHandler(BaseHTTPRequestHandler):
-        def _send_json(self, status: int, payload: dict[str, Any]) -> None:
+        def _send_json(
+            self, status: int, payload: dict[str, Any], retry_after: int = 0
+        ) -> None:
             encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(encoded)))
+            if retry_after:
+                self.send_header("Retry-After", str(retry_after))
             origin = self.headers.get("Origin", "")
             if origin in allowed_origins:
                 self.send_header("Access-Control-Allow-Origin", origin)
@@ -142,6 +180,17 @@ def make_handler(service: RAGQueryService, allowed_origins: frozenset[str]):
                 question = payload.get("question", "") if isinstance(payload, dict) else ""
                 if not isinstance(question, str):
                     raise ValueError("question deve ser texto")
+                if len(question.strip()) > MAX_QUESTION_CHARS:
+                    raise ValueError(f"a pergunta deve ter no máximo {MAX_QUESTION_CHARS} caracteres")
+                if question.strip():
+                    allowed, retry_after = limiter.allow()
+                    if not allowed:
+                        self._send_json(
+                            429,
+                            {"error": "limite de consultas atingido; tente novamente mais tarde"},
+                            retry_after=retry_after,
+                        )
+                        return
                 self._send_json(200, service.ask(question))
             except (json.JSONDecodeError, ValueError) as error:
                 self._send_json(400, {"error": str(error)})

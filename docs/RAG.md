@@ -13,6 +13,11 @@ consulta essas entradas e só então gera uma resposta fundamentada. A resposta
 inclui fontes, nível de confiança e conflitos encontrados. Se a recuperação não
 encontrar entradas, o modelo não é chamado para elaborar uma resposta.
 
+O endpoint `/ask` limita a 20 consultas não vazias por minuto, por processo,
+antes de chamar provedores externos; excesso retorna HTTP 429 com `Retry-After`.
+Esse limite em memória reduz consumo acidental, mas não substitui autenticação
+nem um limite compartilhado entre instâncias em uma implantação pública.
+
 As duas variáveis do Sanity devem ser definidas juntas. O token é de organização
 com permissão Context Viewer e deve permanecer apenas no ambiente do backend
 (terminal local para testes ou serviço no Render); ele nunca é enviado ao frontend.
