@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import os
 import threading
+import time
+from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from rag_tutor import (
     DEFAULT_MIN_SIMILARITY,
@@ -16,12 +18,39 @@ from rag_tutor import (
     NO_EVIDENCE,
     discover_markdown_files,
 )
+from open_coach import GeminiCoach, OpenCoachService, OpenCoachStepError, SanityContextRetriever
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_PORT = 8081
 MAX_BODY_BYTES = 4096
 MAX_QUESTION_CHARS = 500
+MAX_ASK_REQUESTS_PER_MINUTE = 20
+
+
+class QuestionService(Protocol):
+    def ask(self, question: str) -> dict[str, Any]: ...
+
+
+class AskRateLimiter:
+    """Limite global por processo para chamadas que podem acessar provedores pagos."""
+
+    def __init__(self, limit: int = MAX_ASK_REQUESTS_PER_MINUTE, window: float = 60.0):
+        self.limit = limit
+        self.window = window
+        self._calls: deque[float] = deque()
+        self._lock = threading.Lock()
+
+    def allow(self) -> tuple[bool, int]:
+        now = time.monotonic()
+        with self._lock:
+            while self._calls and self._calls[0] <= now - self.window:
+                self._calls.popleft()
+            if len(self._calls) >= self.limit:
+                retry_after = max(1, int(self._calls[0] + self.window - now) + 1)
+                return False, retry_after
+            self._calls.append(now)
+            return True, 0
 
 
 def parse_allowed_origins(configured: str) -> frozenset[str]:
@@ -89,13 +118,23 @@ class RAGQueryService:
         }
 
 
-def make_handler(service: RAGQueryService, allowed_origins: frozenset[str]):
+def make_handler(
+    service: QuestionService,
+    allowed_origins: frozenset[str],
+    limiter: AskRateLimiter | None = None,
+):
+    limiter = limiter or AskRateLimiter()
+
     class RAGRequestHandler(BaseHTTPRequestHandler):
-        def _send_json(self, status: int, payload: dict[str, Any]) -> None:
+        def _send_json(
+            self, status: int, payload: dict[str, Any], retry_after: int = 0
+        ) -> None:
             encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(encoded)))
+            if retry_after:
+                self.send_header("Retry-After", str(retry_after))
             origin = self.headers.get("Origin", "")
             if origin in allowed_origins:
                 self.send_header("Access-Control-Allow-Origin", origin)
@@ -141,9 +180,27 @@ def make_handler(service: RAGQueryService, allowed_origins: frozenset[str]):
                 question = payload.get("question", "") if isinstance(payload, dict) else ""
                 if not isinstance(question, str):
                     raise ValueError("question deve ser texto")
+                if len(question.strip()) > MAX_QUESTION_CHARS:
+                    raise ValueError(f"a pergunta deve ter no máximo {MAX_QUESTION_CHARS} caracteres")
+                if question.strip():
+                    allowed, retry_after = limiter.allow()
+                    if not allowed:
+                        self._send_json(
+                            429,
+                            {"error": "limite de consultas atingido; tente novamente mais tarde"},
+                            retry_after=retry_after,
+                        )
+                        return
                 self._send_json(200, service.ask(question))
             except (json.JSONDecodeError, ValueError) as error:
                 self._send_json(400, {"error": str(error)})
+            except OpenCoachStepError as error:
+                response = {"error": "não foi possível consultar o OpenCoach", "stage": error.stage}
+                if error.provider_http_status is not None:
+                    response["provider_http_status"] = error.provider_http_status
+                if error.provider_status is not None:
+                    response["provider_status"] = error.provider_status
+                self._send_json(503, response)
             except Exception:
                 self._send_json(503, {"error": "não foi possível consultar o RAG"})
 
@@ -160,9 +217,26 @@ def main() -> int:
 
     allowed_origins = parse_allowed_origins(os.getenv("RAG_CORS_ALLOWED_ORIGINS", ""))
     port = int(os.getenv("PORT", str(DEFAULT_PORT)))
-    service = RAGQueryService(LocalRAG(PROJECT_ROOT, GeminiEmbedder(api_key)), PROJECT_ROOT)
+    sanity_endpoint = os.getenv("SANITY_CONTEXT_MCP_URL", "").strip()
+    sanity_token = os.getenv("SANITY_CONTEXT_TOKEN", "").strip()
+    if bool(sanity_endpoint) != bool(sanity_token):
+        raise RuntimeError(
+            "SANITY_CONTEXT_MCP_URL e SANITY_CONTEXT_TOKEN devem ser configuradas juntas"
+        )
+
+    if sanity_endpoint:
+        coach = GeminiCoach(api_key)
+        service = OpenCoachService(
+            SanityContextRetriever(sanity_endpoint, sanity_token, coach), coach
+        )
+        mode = "sanity-context"
+    else:
+        service = RAGQueryService(
+            LocalRAG(PROJECT_ROOT, GeminiEmbedder(api_key)), PROJECT_ROOT
+        )
+        mode = "local-rag"
     server = ThreadingHTTPServer(("0.0.0.0", port), make_handler(service, allowed_origins))
-    print(f"RAG API ativa na porta {port}")
+    print(f"OpenCoach ativo na porta {port} em modo {mode}")
     server.serve_forever()
     return 0
 

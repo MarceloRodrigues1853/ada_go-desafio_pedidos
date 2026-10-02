@@ -35,7 +35,7 @@ export interface Order {
 export interface RAGSource {
   file: string
   position: number
-  similarity: number
+  similarity?: number
   content: string
 }
 
@@ -43,9 +43,12 @@ export interface RAGResponse {
   answer: string
   has_evidence: boolean
   sources: RAGSource[]
-  threshold: number
-  documents_indexed: number
-  chunks_indexed: number
+  threshold?: number
+  documents_indexed?: number
+  chunks_indexed?: number
+  confidence?: 'low' | 'medium' | 'high'
+  conflicts?: string[]
+  retrieval_mode?: 'local-rag' | 'sanity-context'
 }
 
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8080').replace(/\/$/, '')

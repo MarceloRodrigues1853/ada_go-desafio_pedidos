@@ -24,6 +24,13 @@ Implemente apenas tarefas pequenas, verificáveis e autorizadas.
 - Não adicionar dependências sem explicar primeiro.
 - Manter alterações focadas na tarefa solicitada.
 
+## Forma de trabalho
+
+- Trabalhar em etapas pequenas e explicar o propósito e a validação de cada uma.
+- Responder de forma concisa; fornecer comandos prontos quando o usuário for executá-los.
+- Deixar `git add`, `commit`, `push` e merge para o usuário, salvo autorização explícita para uma ação específica.
+- Ao iniciar uma estrutura nova, manter `AGENTS.md` para regras gerais e criar skills de projeto em `.codex/skills/<nome>/SKILL.md` somente para fluxos repetidos; não criar pastas vazias nem agentes sem necessidade.
+
 ## Validação obrigatória
 
 Após qualquer alteração Go:

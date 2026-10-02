@@ -6,8 +6,11 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+from unittest.mock import patch
 
+from open_coach import GeminiRequestError, OpenCoachStepError
 from rag_api import (
+    AskRateLimiter,
     MAX_QUESTION_CHARS,
     RAGQueryService,
     make_handler,
@@ -27,6 +30,13 @@ class FakeEmbedder:
 
 
 class RAGQueryServiceTests(unittest.TestCase):
+    def test_rate_limit_resets_after_window(self):
+        limiter = AskRateLimiter(limit=1, window=60)
+        with patch("rag_api.time.monotonic", side_effect=[100.0, 101.0, 160.0]):
+            self.assertEqual(limiter.allow(), (True, 0))
+            self.assertEqual(limiter.allow(), (False, 60))
+            self.assertEqual(limiter.allow(), (True, 0))
+
     def make_service(self):
         temporary = tempfile.TemporaryDirectory()
         root = Path(temporary.name)
@@ -137,6 +147,80 @@ class RAGHTTPTests(unittest.TestCase):
         self.addCleanup(error.close)
         self.assertEqual(error.code, 403)
         self.assertEqual(self.embedder.calls, 0)
+
+    def test_open_coach_failure_reports_only_stage(self):
+        class FailingService:
+            def ask(self, question):
+                raise OpenCoachStepError("sanity_connect")
+
+        self.server.RequestHandlerClass = make_handler(
+            FailingService(), frozenset({"https://frontend.example.app"})
+        )
+
+        with self.assertRaises(HTTPError) as captured:
+            urlopen(self.request("https://frontend.example.app"), timeout=2)
+
+        error = captured.exception
+        self.addCleanup(error.close)
+        self.assertEqual(error.code, 503)
+        self.assertEqual(
+            json.load(error),
+            {"error": "não foi possível consultar o OpenCoach", "stage": "sanity_connect"},
+        )
+
+    def test_nested_gemini_failure_reports_safe_provider_status(self):
+        class FailingService:
+            def ask(self, question):
+                cause = ExceptionGroup(
+                    "mcp", [GeminiRequestError(429, "RESOURCE_EXHAUSTED")]
+                )
+                raise OpenCoachStepError("gemini_selection", cause) from cause
+
+        self.server.RequestHandlerClass = make_handler(
+            FailingService(), frozenset({"https://frontend.example.app"})
+        )
+
+        with self.assertRaises(HTTPError) as captured:
+            urlopen(self.request("https://frontend.example.app"), timeout=2)
+
+        error = captured.exception
+        self.addCleanup(error.close)
+        self.assertEqual(error.code, 503)
+        self.assertEqual(
+            json.load(error),
+            {
+                "error": "não foi possível consultar o OpenCoach",
+                "stage": "gemini_selection",
+                "provider_http_status": 429,
+                "provider_status": "RESOURCE_EXHAUSTED",
+            },
+        )
+
+    def test_ask_rate_limit_returns_429_before_another_provider_call(self):
+        class CountingService:
+            calls = 0
+
+            def ask(self, question):
+                self.calls += 1
+                return {"answer": question}
+
+        service = CountingService()
+        self.server.RequestHandlerClass = make_handler(
+            service,
+            frozenset({"https://frontend.example.app"}),
+            AskRateLimiter(limit=1),
+        )
+
+        with urlopen(self.request("https://frontend.example.app"), timeout=2):
+            pass
+        with self.assertRaises(HTTPError) as captured:
+            urlopen(self.request("https://frontend.example.app"), timeout=2)
+
+        error = captured.exception
+        self.addCleanup(error.close)
+        self.assertEqual(error.code, 429)
+        self.assertGreaterEqual(int(error.headers["Retry-After"]), 1)
+        self.assertEqual(service.calls, 1)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,40 @@
 # Protótipo RAG do agente tutor
 
+## Evolução para OpenCoach com Sanity Context
+
+O serviço HTTP possui dois modos, selecionados somente por configuração:
+
+- sem variáveis do Sanity, preserva o `LocalRAG` descrito neste documento;
+- com `SANITY_CONTEXT_MCP_URL` e `SANITY_CONTEXT_TOKEN`, ativa o OpenCoach.
+
+No modo OpenCoach, o backend abre uma conexão autenticada com o Context MCP,
+lê o outline da Knowledge Base, usa Gemini para selecionar paths existentes,
+consulta essas entradas e só então gera uma resposta fundamentada. A resposta
+inclui fontes, nível de confiança e conflitos encontrados. Se a recuperação não
+encontrar entradas, o modelo não é chamado para elaborar uma resposta.
+
+O endpoint `/ask` limita a 20 consultas não vazias por minuto, por processo,
+antes de chamar provedores externos; excesso retorna HTTP 429 com `Retry-After`.
+Esse limite em memória reduz consumo acidental, mas não substitui autenticação
+nem um limite compartilhado entre instâncias em uma implantação pública.
+
+As duas variáveis do Sanity devem ser definidas juntas. O token é de organização
+com permissão Context Viewer e deve permanecer apenas no ambiente do backend
+(terminal local para testes ou serviço no Render); ele nunca é enviado ao frontend.
+`GOOGLE_API_KEY` continua necessária nos dois modos. A imagem de produção instala
+somente `requirements.rag.txt`.
+
+Configuração criada para este projeto:
+
+```text
+SANITY_CONTEXT_MCP_URL=https://api.sanity.io/v1/context/organizations/o6a7ecvjt/mcp/open-coach
+SANITY_CONTEXT_TOKEN=<token Context Viewer configurado no ambiente do backend>
+```
+
+A Knowledge Base usada pelo endpoint tem o ID público `kbbKnMXYLs6b`. O valor
+do token não deve ser gravado no repositório, em arquivos `.env` versionados ou
+no frontend.
+
 ## Arquitetura resumida
 
 O protótipo mantém duas formas de executar a mesma recuperação, sem banco

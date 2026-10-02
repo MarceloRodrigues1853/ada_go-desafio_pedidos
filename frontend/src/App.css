@@ -114,6 +114,11 @@ textarea { resize: vertical; min-height: 120px; font: inherit; line-height: 1.55
 .rag-stats { display: flex; flex-wrap: wrap; gap: 8px; margin: -4px 0 18px; }
 .rag-stats span { border: 1px solid var(--line); color: var(--muted); padding: 6px 8px; font: .64rem 'DM Mono'; }
 .source-list { display: grid; gap: 12px; }
+.coach-answer, .conflict-list { border: 1px solid var(--line); background: #10161a; padding: 18px; }
+.coach-answer strong, .conflict-list strong { color: var(--cyan); font: .68rem 'DM Mono'; letter-spacing: .08em; }
+.coach-answer p, .conflict-list p { color: #d5dde2; font-size: .82rem; line-height: 1.7; margin: 10px 0 0; white-space: pre-wrap; }
+.conflict-list { border-color: #6a532e; background: #211b11; }
+.conflict-list strong { color: var(--amber); }
 .evidence-intro { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 4px; }
 .evidence-intro strong { font-size: .86rem; }
 .evidence-intro span { color: var(--muted); font-size: .72rem; }

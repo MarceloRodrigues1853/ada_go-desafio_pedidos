@@ -9,7 +9,7 @@ const navigation: { id: View; label: string; marker: string }[] = [
   { id: 'clientes', label: 'Clientes', marker: '02' },
   { id: 'produtos', label: 'Produtos', marker: '03' },
   { id: 'pedidos', label: 'Pedidos', marker: '04' },
-  { id: 'tutor', label: 'Tutor RAG', marker: '05' },
+  { id: 'tutor', label: 'OpenCoach', marker: '05' },
 ]
 
 function formatDate(value: string) {
@@ -152,7 +152,7 @@ function TutorView() {
       setResult(await ragApi.ask(normalizedQuestion))
     } catch (requestError) {
       setResult(null)
-      setError(requestError instanceof Error ? requestError.message : 'Não foi possível consultar o Tutor RAG.')
+      setError(requestError instanceof Error ? requestError.message : 'Não foi possível consultar o OpenCoach.')
     } finally {
       setLoading(false)
     }
@@ -165,9 +165,9 @@ function TutorView() {
 
   return <div className="tutor-layout">
     <section className="panel tutor-query">
-      <span className="eyebrow">RECUPERAÇÃO DOCUMENTAL</span>
-      <h2>Consulte a documentação do projeto</h2>
-      <p>O tutor busca evidências em arquivos Markdown autorizados. As fontes ajudam na investigação, mas a implementação deve ser confirmada no código.</p>
+      <span className="eyebrow">TUTOR FUNDAMENTADO</span>
+      <h2>Converse com o OpenCoach</h2>
+      <p>O tutor responde com base em fontes autorizadas. No modo Sanity Context, ele consulta uma Knowledge Base e torna conflitos entre documentos explícitos.</p>
       <form onSubmit={(event) => void submit(event)}>
         <label className="field"><span>Pergunta</span><textarea maxLength={500} rows={5} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ex.: Como funciona o fluxo de pagamento?" /></label>
         <div className="query-footer"><small>{question.length}/500 caracteres</small><button className="primary tutor-submit" type="submit" disabled={loading}>{loading ? 'Consultando…' : 'Buscar evidências'}</button></div>
@@ -177,20 +177,28 @@ function TutorView() {
     </section>
 
     <section className="panel tutor-results" aria-live="polite">
-      <div className="section-heading"><div><span className="eyebrow">RESULTADO</span><h2>Evidências recuperadas</h2></div></div>
+      <div className="section-heading"><div><span className="eyebrow">RESULTADO</span><h2>Resposta fundamentada</h2></div></div>
       {error && <div className="feedback error">{error}</div>}
       {!error && !result && <Empty message="Faça uma pergunta para consultar as fontes indexadas." />}
       {result && <>
-        <div className="rag-stats"><span>{result.documents_indexed} documentos</span><span>{result.chunks_indexed} trechos</span><span>limite {result.threshold.toFixed(2)}</span></div>
+        <div className="rag-stats">
+          <span>{result.retrieval_mode === 'sanity-context' ? 'Sanity Context' : 'RAG local'}</span>
+          {result.documents_indexed !== undefined && <span>{result.documents_indexed} documentos</span>}
+          {result.chunks_indexed !== undefined && <span>{result.chunks_indexed} trechos</span>}
+          {result.threshold !== undefined && <span>limite {result.threshold.toFixed(2)}</span>}
+          {result.confidence && <span>confiança {result.confidence}</span>}
+        </div>
         {!result.has_evidence ? <div className="no-evidence"><strong>Nenhuma evidência suficiente</strong><p>{result.answer}</p></div> : <div className="source-list">
-          <div className="evidence-intro"><strong>{result.sources.length} {result.sources.length === 1 ? 'fonte encontrada' : 'fontes encontradas'}</strong><span>Ordenadas por proximidade com a pergunta</span></div>
+          {result.retrieval_mode === 'sanity-context' && <div className="coach-answer"><strong>RESPOSTA</strong><p>{result.answer}</p></div>}
+          {!!result.conflicts?.length && <div className="conflict-list"><strong>CONFLITOS ENCONTRADOS</strong>{result.conflicts.map((conflict) => <p key={conflict}>{conflict}</p>)}</div>}
+          <div className="evidence-intro"><strong>{result.sources.length} {result.retrieval_mode === 'sanity-context' ? (result.sources.length === 1 ? 'bloco de evidências' : 'blocos de evidências') : (result.sources.length === 1 ? 'fonte encontrada' : 'fontes encontradas')}</strong><span>{result.retrieval_mode === 'sanity-context' ? 'Entradas selecionadas da base de conhecimento' : 'Ordenadas por proximidade com a pergunta'}</span></div>
           {result.sources.map((source, index) => <article className="source-card" key={`${source.file}-${source.position}-${index}`}>
-            <div className="source-card-heading"><span className="source-rank">{String(index + 1).padStart(2, '0')}</span><div><small>ARQUIVO DE ORIGEM</small><strong>{source.file}</strong></div><div className="similarity-block"><small>SIMILARIDADE</small><strong>{source.similarity.toFixed(3)}</strong></div></div>
-            <div className="similarity-track" aria-label={`Similaridade ${source.similarity.toFixed(3)}`}><span style={{ width: `${Math.max(0, Math.min(100, source.similarity * 100))}%` }} /></div>
-            <div className="source-position"><span>Trecho {source.position}</span><span>Acima do limite de {result.threshold.toFixed(2)}</span></div>
+            <div className="source-card-heading"><span className="source-rank">{String(index + 1).padStart(2, '0')}</span><div><small>{result.retrieval_mode === 'sanity-context' ? 'ENTRADAS CONSULTADAS' : 'FONTE DE ORIGEM'}</small><strong>{source.file}</strong></div>{source.similarity !== undefined && <div className="similarity-block"><small>SIMILARIDADE</small><strong>{source.similarity.toFixed(3)}</strong></div>}</div>
+            {source.similarity !== undefined && <div className="similarity-track" aria-label={`Similaridade ${source.similarity.toFixed(3)}`}><span style={{ width: `${Math.max(0, Math.min(100, source.similarity * 100))}%` }} /></div>}
+            <div className="source-position"><span>{result.retrieval_mode === 'sanity-context' ? 'Bloco' : 'Trecho'} {source.position}</span>{result.threshold !== undefined && <span>Acima do limite de {result.threshold.toFixed(2)}</span>}</div>
             <div className="evidence-content">{evidenceLines(source.content).map((line, lineIndex) => <div className={`${line.heading ? 'evidence-heading' : ''} ${line.listItem ? 'evidence-list-item' : ''}`} key={`${lineIndex}-${line.text.slice(0, 20)}`}>{line.listItem && <span aria-hidden="true">→</span>}<p>{line.text}</p></div>)}</div>
           </article>)}
-          <p className="similarity-help"><strong>Como interpretar:</strong> valores maiores indicam maior proximidade textual com a pergunta. Similaridade não confirma que a documentação esteja atualizada; valide a implementação no código.</p>
+          <p className="similarity-help"><strong>Como interpretar:</strong> as fontes fundamentam a resposta, mas a implementação continua sendo a referência definitiva e deve ser confirmada no código.</p>
         </div>}
       </>}
     </section>
